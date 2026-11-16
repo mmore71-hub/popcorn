@@ -563,11 +563,28 @@ function parseSetup(text) {
   if (m) {
     const prm = new URLSearchParams(m[1]);
     const key = (prm.get("k") || "").trim();
-    return key ? { key, subs: (prm.get("s") || "").split(",").map(Number).filter(Boolean) } : null;
+    let likes = null;
+    try { if (prm.get("l")) likes = b64dec(prm.get("l")).map(([k, title]) => ({ k, title, at: Date.now() })); } catch {}
+    return key ? { key, subs: (prm.get("s") || "").split(",").map(Number).filter(Boolean), likes } : null;
   }
   return /^[A-Za-z0-9._-]{20,}$/.test(text) ? { key: text, subs: null } : null;
 }
+/* base64 "url-safe" per il link (supporta accenti) */
+function b64enc(obj) {
+  const bytes = new TextEncoder().encode(JSON.stringify(obj));
+  let bin = ""; bytes.forEach(b => bin += String.fromCharCode(b));
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+function b64dec(str) {
+  const bin = atob(str.replace(/-/g, "+").replace(/_/g, "/"));
+  return JSON.parse(new TextDecoder().decode(Uint8Array.from(bin, c => c.charCodeAt(0))));
+}
 function applySetup(r) {
+  if (r.likes && r.likes.length) {      // unisce i preferiti dell'altro dispositivo a quelli già presenti
+    const have = new Set(state.likes.map(l => l.k));
+    state.likes = [...state.likes, ...r.likes.filter(l => !have.has(l.k))].slice(0, 60);
+    LS.set("likes", state.likes);
+  }
   state.key = r.key; LS.set("tmdbKey", r.key);
   if (r.subs) { state.subs = new Set(r.subs); saveSubs(); }
   state.providers = null; cacheClear();
@@ -763,7 +780,7 @@ async function viewSettings() {
     </div>
     <div class="panel">
       <b>📱 Usa Popcorn su un altro dispositivo</b>
-      <p class="muted small" style="margin:4px 0 10px">Invia questo link a te stesso (WhatsApp, email…) e aprilo sul telefono: chiave e abbonamenti si configurano da soli. Il link contiene la tua chiave, quindi non condividerlo con estranei.</p>
+      <p class="muted small" style="margin:4px 0 10px">Invia questo link a te stesso (WhatsApp, email…) e aprilo sul telefono: chiave, abbonamenti e ❤️ preferiti si configurano da soli (i preferiti si aggiungono a quelli già presenti). Il link contiene la tua chiave, quindi non condividerlo con estranei.</p>
       <div class="field">
         <button class="btn pri" id="share" ${state.key ? "" : "disabled"}>Condividi link</button>
         <button class="btn" id="copy" ${state.key ? "" : "disabled"}>Copia link</button>
@@ -793,7 +810,8 @@ async function viewSettings() {
     if (!confirm("Vuoi cancellare preferiti e cronologia? I consigli ripartiranno da zero.")) return;
     state.likes = []; state.history = []; LS.set("likes", []); LS.set("history", []); viewSettings();
   };
-  const setupLink = () => location.href.split("#")[0] + "#/setup?k=" + encodeURIComponent(state.key) + "&s=" + [...state.subs].join(",");
+  const setupLink = () => location.href.split("#")[0] + "#/setup?k=" + encodeURIComponent(state.key) + "&s=" + [...state.subs].join(",")
+    + (state.likes.length ? "&l=" + b64enc(state.likes.map(l => [l.k, l.title])) : "");
   $("#copy").onclick = async () => {
     try { await navigator.clipboard.writeText(setupLink()); $("#lst").innerHTML = `<span style="color:var(--ok)">✓ Link copiato. Incollalo in un messaggio a te stesso e aprilo dal telefono.</span>`; }
     catch { prompt("Copia questo link:", setupLink()); }
