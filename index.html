@@ -117,6 +117,51 @@ h2{font-size:18px;margin:6px 0 12px;letter-spacing:-.2px}
 .toggle input{width:18px;height:18px;accent-color:var(--ac)}
 .row{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
 
+/* ---- home ---- */
+.featwrap{position:relative;margin:-16px -16px 6px}
+.feat{position:relative;display:block;min-height:420px;background:var(--bg2) center 20%/cover no-repeat;animation:fade .6s ease}
+@keyframes fade{from{opacity:.35}to{opacity:1}}
+.feat::after{content:"";position:absolute;inset:0;background:linear-gradient(to top,var(--bg) 0%,rgba(15,17,21,.82) 32%,rgba(15,17,21,.15) 72%,rgba(15,17,21,.35) 100%),linear-gradient(to right,rgba(15,17,21,.75),transparent 65%)}
+.feat-in{position:absolute;z-index:1;left:20px;right:20px;bottom:26px;max-width:580px}
+.feat-tag{font-size:12px;text-transform:uppercase;letter-spacing:1px;color:#ffd166;font-weight:700}
+.feat-t{font-size:30px;font-weight:800;line-height:1.08;margin:6px 0 6px;letter-spacing:-.6px;text-shadow:0 2px 16px rgba(0,0,0,.5)}
+.feat-m{color:#c9ced8;font-size:14px}
+.feat-o{margin-top:10px;color:#d8dce4;font-size:14px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.feat-p{display:flex;align-items:center;gap:8px;margin-top:12px;min-height:30px}
+.feat-p img{width:30px;height:30px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.5)}
+.feat-b{display:inline-block;margin-top:14px;background:#fff;color:#0f1115;padding:10px 20px;border-radius:10px;font-weight:700;font-size:15px;transition:transform .12s}
+.feat:hover .feat-b{transform:scale(1.03)}
+.dots{position:absolute;z-index:2;right:20px;bottom:30px;display:flex;gap:6px}
+.dots button{width:8px;height:8px;border-radius:99px;background:rgba(255,255,255,.35);transition:all .25s}
+.dots button.on{width:22px;background:#fff}
+@media(min-width:700px){
+  .featwrap{margin:0 0 6px}
+  .feat{min-height:470px;border-radius:20px;overflow:hidden}
+  .feat::after{border-radius:20px}
+  .feat-in{left:36px;bottom:36px}
+  .feat-t{font-size:46px}
+  .feat-o{font-size:15px}
+  .dots{right:30px;bottom:38px}
+}
+@media(max-width:699px){.dots{top:calc(14px);bottom:auto;right:16px}}
+.greet h1{font-size:21px;letter-spacing:-.3px;margin:14px 0 12px}
+.pchips{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;margin:0 -16px 4px;padding:2px 16px 6px}
+.pchips::-webkit-scrollbar{display:none}
+.pchip{display:flex;align-items:center;gap:8px;padding:5px 14px 5px 5px;border-radius:999px;background:var(--bg3);border:1px solid var(--line);white-space:nowrap;font-size:14px;flex-shrink:0;transition:all .15s}
+.pchip.all{padding:5px 14px}
+.pchip img{width:26px;height:26px;border-radius:7px}
+.pchip.on{border-color:var(--ac);background:rgba(79,140,255,.16);color:#fff}
+.hrow{margin:20px 0 6px}
+.hrow-h{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+.hrow h2{margin:0;font-size:18px}
+.arrows{display:none;gap:6px;flex-shrink:0}
+@media(hover:hover) and (min-width:700px){.arrows{display:flex}}
+.arrows button{width:34px;height:34px;border-radius:50%;background:var(--bg3);border:1px solid var(--line);font-size:20px;line-height:1;display:grid;place-items:center}
+.arrows button:hover{border-color:var(--tx3)}
+.scroller{display:flex;gap:12px;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;margin:0 -16px;padding:4px 16px 10px;scroll-padding:0 16px}
+.scroller::-webkit-scrollbar{display:none}
+.scroller .card{flex:0 0 132px;scroll-snap-align:start}
+@media(min-width:700px){.scroller .card{flex-basis:165px}}
 footer{max-width:1100px;margin:0 auto;padding:0 16px 30px;color:var(--tx3);font-size:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 footer img{height:12px}
 .empty{padding:40px 0;text-align:center;color:var(--tx2)}
@@ -159,7 +204,7 @@ const LS = {
 const state = {
   key: LS.get("tmdbKey", ""),
   subs: new Set(LS.get("subs", [])),
-  homeTab: LS.get("homeTab", "movie"),
+  homeProv: LS.get("homeProv", null),
   providers: null
 };
 const saveSubs = () => LS.set("subs", [...state.subs]);
@@ -230,20 +275,27 @@ function cardHTML(it, type) {
 }
 const skeletonGrid = n => `<div class="grid">${Array.from({ length: n }, () => `<div class="card"><div class="poster sk"></div><div class="meta"><div class="sk" style="height:12px;border-radius:4px;width:80%"></div></div></div>`).join("")}</div>`;
 
-/* Shows logos of the user's subscriptions on each card (only flatrate/free/ads) */
-async function decorateCards(root, signal) {
-  if (!state.subs.size) return;
-  const cards = [...root.querySelectorAll(".card[data-k]")].slice(0, 20);
-  await Promise.all(cards.map(async c => {
-    const [t, id] = c.dataset.k.split(":");
-    try {
-      const j = await tmdb(`/${t}/${id}/watch/providers`, {}, { signal });
-      const reg = j.results?.[REGION]; if (!reg) return;
-      const inc = [...(reg.flatrate || []), ...(reg.free || []), ...(reg.ads || [])].filter(p => state.subs.has(p.provider_id));
-      const uniq = [...new Map(inc.map(p => [p.provider_id, p])).values()];
-      if (uniq.length) c.querySelector(".minis").innerHTML = uniq.slice(0, 5).map(p => `<img src="${img(p.logo_path, "w92")}" alt="${esc(p.provider_name)}" title="${esc(p.provider_name)}">`).join("");
-    } catch {}
-  }));
+/* Shows logos of the user's subscriptions on each card — loaded lazily when the card becomes visible */
+let io = null;
+function decorateCards(root) {
+  if (!state.subs.size || !root) return;
+  io = io || new IntersectionObserver(es => es.forEach(e => {
+    if (e.isIntersecting) { io.unobserve(e.target); decorateOne(e.target); }
+  }), { rootMargin: "150px" });
+  root.querySelectorAll(".card[data-k]:not([data-d])").forEach(c => { c.dataset.d = "1"; io.observe(c); });
+}
+async function myProviders(type, id) {
+  const j = await tmdb(`/${type}/${id}/watch/providers`);
+  const reg = j.results?.[REGION]; if (!reg) return [];
+  const inc = [...(reg.flatrate || []), ...(reg.free || []), ...(reg.ads || [])].filter(p => state.subs.has(p.provider_id));
+  return [...new Map(inc.map(p => [p.provider_id, p])).values()];
+}
+async function decorateOne(c) {
+  const [t, id] = c.dataset.k.split(":");
+  try {
+    const mine = await myProviders(t, id);
+    if (mine.length) c.querySelector(".minis").innerHTML = mine.slice(0, 5).map(p => `<img src="${img(p.logo_path, "w92")}" alt="${esc(p.provider_name)}" title="${esc(p.provider_name)}">`).join("");
+  } catch {}
 }
 
 async function loadProviders() {
@@ -266,29 +318,129 @@ async function loadProviders() {
 let ctrl = null;
 const newCtrl = () => { ctrl?.abort(); ctrl = new AbortController(); return ctrl.signal; };
 
+let heroTimer = null;
+const stopHero = () => { clearInterval(heroTimer); heroTimer = null; };
+
+function greeting() {
+  const h = new Date().getHours();
+  return h < 6 ? "Buonanotte" : h < 13 ? "Buongiorno" : h < 18 ? "Buon pomeriggio" : "Buonasera";
+}
+const rowSkeleton = n => Array.from({ length: n }, () => `<div class="card"><div class="poster sk"></div><div class="meta"><div class="sk" style="height:12px;border-radius:4px;width:80%"></div></div></div>`).join("");
+
 async function viewHome() {
-  const signal = newCtrl();
+  const signal = newCtrl(); stopHero();
   if (!state.key) { app.innerHTML = welcomeHTML(); return; }
-  const mine = state.subs.size > 0;
-  const tab = state.homeTab;
+
+  const subs = [...state.subs];
+  let provs = [];
+  if (subs.length) { try { provs = (await loadProviders()).filter(p => state.subs.has(p.id)); } catch {} }
+  if (signal.aborted) return;
+  const sel = provs.some(p => p.id === state.homeProv) ? state.homeProv : null;
+  const where = sel ? "su " + provs.find(p => p.id === sel).name : subs.length ? "sui tuoi abbonamenti" : "in streaming";
+
+  const today = new Date();
+  const iso = d => d.toISOString().slice(0, 10);
+  const plus = n => iso(new Date(today.getTime() + n * 864e5));
+  const base = { watch_region: REGION, with_watch_monetization_types: "flatrate|free|ads" };
+  if (subs.length) base.with_watch_providers = sel ? String(sel) : subs.join("|");
+  const disc = (type, extra) => tmdb(`/discover/${type}`, { ...base, ...extra }, { signal }).then(j => j.results.map(r => ({ ...r, media_type: type })));
+
+  const rows = [
+    { id: "pm", t: `Film popolari ${where}`, f: () => disc("movie", { sort_by: "popularity.desc" }) },
+    { id: "pt", t: `Serie popolari ${where}`, f: () => disc("tv", { sort_by: "popularity.desc" }) },
+    { id: "trend", t: "Di tendenza oggi", sub: "Tutte le piattaforme", f: () => tmdb("/trending/all/day", {}, { signal }).then(j => j.results.filter(r => r.media_type === "movie" || r.media_type === "tv")) },
+    { id: "air", t: `Serie con episodi questa settimana`, f: () => disc("tv", { sort_by: "popularity.desc", "air_date.gte": plus(-7), "air_date.lte": plus(7) }) },
+    { id: "nm", t: `Film usciti di recente`, f: () => disc("movie", { sort_by: "primary_release_date.desc", "primary_release_date.lte": iso(today), "vote_count.gte": 25 }) },
+    { id: "topm", t: `I film più apprezzati`, f: () => disc("movie", { sort_by: "vote_average.desc", "vote_count.gte": 1500 }) },
+    { id: "topt", t: `Le serie più apprezzate`, f: () => disc("tv", { sort_by: "vote_average.desc", "vote_count.gte": 400 }) }
+  ];
+
   app.innerHTML = `
-    ${mine ? "" : `<div class="panel"><b>Scegli i tuoi abbonamenti</b><p class="muted small" style="margin-top:4px">Così ti mostro cosa puoi vedere senza pagare altro e metto in evidenza le tue piattaforme.</p><a class="cta" href="#/impostazioni">Scegli abbonamenti</a></div>`}
-    <h2>${mine ? "Popolari sui tuoi abbonamenti" : "Di tendenza questa settimana"}</h2>
-    <div class="tabs">
-      <button class="chip ${tab === "movie" ? "on" : ""}" data-tab="movie">Film</button>
-      <button class="chip ${tab === "tv" ? "on" : ""}" data-tab="tv">Serie TV</button>
-    </div>
-    <div id="hgrid">${skeletonGrid(12)}</div>`;
-  app.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => { state.homeTab = b.dataset.tab; LS.set("homeTab", state.homeTab); viewHome(); });
-  try {
-    const j = mine
-      ? await tmdb(`/discover/${tab}`, { watch_region: REGION, with_watch_providers: [...state.subs].join("|"), with_watch_monetization_types: "flatrate|free|ads", sort_by: "popularity.desc" }, { signal })
-      : await tmdb(`/trending/${tab}/week`, {}, { signal });
-    const g = $("#hgrid");
-    if (!g) return;
-    g.innerHTML = j.results.length ? `<div class="grid">${j.results.map(it => cardHTML(it, tab)).join("")}</div>` : `<div class="empty">Nessun titolo trovato.</div>`;
-    decorateCards(g, signal);
-  } catch (e) { if (e.name !== "AbortError") $("#hgrid").innerHTML = errorBox(e); }
+    <div class="featwrap" id="feat"><div class="feat sk"></div></div>
+    <div class="greet"><h1>${greeting()}, cosa guardiamo ${new Date().getHours() >= 17 || new Date().getHours() < 4 ? "stasera" : "oggi"}? 🍿</h1></div>
+    ${subs.length ? "" : `<div class="panel"><b>Scegli i tuoi abbonamenti</b><p class="muted small" style="margin-top:4px">Così la home ti mostra solo quello che puoi vedere senza pagare altro.</p><a class="cta" href="#/impostazioni">Scegli abbonamenti</a></div>`}
+    ${provs.length > 1 ? `<div class="pchips">
+        <button class="pchip all ${sel ? "" : "on"}" data-p="">Tutti i miei</button>
+        ${provs.map(p => `<button class="pchip ${sel === p.id ? "on" : ""}" data-p="${p.id}"><img src="${img(p.logo, "w92")}" alt="">${esc(p.name)}</button>`).join("")}
+      </div>` : ""}
+    ${rows.map(r => `
+      <section class="hrow" id="row-${r.id}">
+        <div class="hrow-h"><h2>${esc(r.t)}${r.sub ? ` <span class="muted small">· ${r.sub}</span>` : ""}</h2>
+          <div class="arrows"><button data-dir="-1" aria-label="Indietro">‹</button><button data-dir="1" aria-label="Avanti">›</button></div></div>
+        <div class="scroller">${rowSkeleton(8)}</div>
+      </section>`).join("")}`;
+
+  app.querySelectorAll(".pchip").forEach(b => b.onclick = () => {
+    state.homeProv = b.dataset.p ? +b.dataset.p : null; LS.set("homeProv", state.homeProv); viewHome();
+  });
+  app.querySelectorAll(".arrows button").forEach(b => b.onclick = () => {
+    const sc = b.closest(".hrow").querySelector(".scroller");
+    sc.scrollBy({ left: +b.dataset.dir * sc.clientWidth * 0.85, behavior: "smooth" });
+  });
+
+  const results = {};
+  await Promise.all(rows.map(async r => {
+    const sec = $("#row-" + r.id);
+    try {
+      const items = (await r.f()).filter(it => it.poster_path);
+      results[r.id] = items;
+      if (signal.aborted || !sec) return;
+      if (!items.length) { sec.remove(); return; }
+      const sc = sec.querySelector(".scroller");
+      sc.innerHTML = items.map(it => cardHTML(it)).join("");
+      decorateCards(sc);
+    } catch (e) {
+      if (e.name === "AbortError") return;
+      results[r.id] = [];
+      if (r.id === "pm" && sec) sec.innerHTML = errorBox(e); else sec?.remove();
+    }
+  }).map((p, i) => i < 3 ? p.then(() => { if (i === 0 || i === 1) buildHero(); }) : p));
+
+  function buildHero() {
+    if (heroTimer || signal.aborted || !results.pm || !results.pt) return;
+    const pool = [];
+    const a = results.pm || [], b = results.pt || [];
+    for (let i = 0; i < 6; i++) { if (a[i]) pool.push(a[i]); if (b[i]) pool.push(b[i]); }
+    const list = pool.filter(x => x.backdrop_path && x.overview).slice(0, 6);
+    if (!list.length) { $("#feat")?.remove(); return; }
+    let i = 0;
+    const show = () => renderHero(list, i, signal);
+    show();
+    heroTimer = setInterval(() => { i = (i + 1) % list.length; show(); }, 8000);
+    $("#feat").addEventListener("click", e => {
+      const d = e.target.closest("[data-i]"); if (!d) return;
+      e.preventDefault(); i = +d.dataset.i; show();
+      clearInterval(heroTimer); heroTimer = setInterval(() => { i = (i + 1) % list.length; show(); }, 8000);
+    });
+  }
+}
+
+function renderHero(list, i, signal) {
+  const box = $("#feat"); if (!box || signal.aborted) return;
+  const it = list[i], t = it.media_type;
+  const title = it.title || it.name;
+  const meta = [t === "tv" ? "Serie TV" : "Film", year(it.release_date || it.first_air_date), it.vote_average ? "★ " + it.vote_average.toFixed(1) : ""].filter(Boolean).join(" · ");
+  const pre = new Image(); pre.src = img(it.backdrop_path, "w1280");
+  const paint = () => {
+    if (!$("#feat")) return;
+    box.innerHTML = `
+      <a class="feat" href="#/${t}/${it.id}" style="background-image:url(${img(it.backdrop_path, "w1280")})">
+        <div class="feat-in">
+          <div class="feat-tag">In evidenza</div>
+          <div class="feat-t">${esc(title)}</div>
+          <div class="feat-m">${esc(meta)}</div>
+          <p class="feat-o">${esc(it.overview)}</p>
+          <div class="feat-p" id="featp"></div>
+          <span class="feat-b">▶ Dove vederlo</span>
+        </div>
+      </a>
+      <div class="dots">${list.map((_, k) => `<button data-i="${k}" class="${k === i ? "on" : ""}" aria-label="Titolo ${k + 1}"></button>`).join("")}</div>`;
+    if (state.subs.size) myProviders(t, it.id).then(m => {
+      const p = $("#featp");
+      if (p && m.length) p.innerHTML = `<span class="muted small">Incluso in</span>` + m.slice(0, 4).map(x => `<img src="${img(x.logo_path, "w92")}" alt="${esc(x.provider_name)}" title="${esc(x.provider_name)}">`).join("");
+    }).catch(() => {});
+  };
+  pre.complete ? paint() : (pre.onload = pre.onerror = paint);
 }
 
 function welcomeHTML() {
@@ -357,7 +509,7 @@ async function viewSearch(q) {
   try {
     const items = await smartSearch(q, signal);
     app.innerHTML = `<h2>Risultati per “${esc(q)}”</h2>` + (items.length ? `<div class="grid">${items.map(it => cardHTML(it)).join("")}</div>` : `<div class="empty">Nessun risultato. Prova con il titolo originale.</div>`);
-    decorateCards(app, signal);
+    decorateCards(app);
   } catch (e) { if (e.name !== "AbortError") app.innerHTML = errorBox(e); }
 }
 
@@ -401,7 +553,7 @@ async function viewDetail(type, id) {
         const box = $("#saga");
         if (box && parts.length) {
           box.innerHTML = `<div class="sec"><h3>Della stessa saga · ${esc(c.name)}</h3><div class="grid">${parts.map(p => cardHTML(p, "movie")).join("")}</div></div>`;
-          decorateCards(box, signal);
+          decorateCards(box);
         }
       }).catch(() => {});
     }
@@ -410,7 +562,7 @@ async function viewDetail(type, id) {
     if (rec.length) {
       const box = $("#related");
       box.innerHTML = `<div class="sec"><h3>Potrebbe interessarti</h3><div class="grid">${rec.map(r => cardHTML(r)).join("")}</div></div>`;
-      decorateCards(box, signal);
+      decorateCards(box);
     }
   } catch (e) { if (e.name !== "AbortError") app.innerHTML = errorBox(e); }
 }
@@ -507,6 +659,7 @@ async function renderProviders() {
 /* ================= router & search box ================= */
 const qIn = $("#q"), sbox = $("#sbox");
 function route() {
+  stopHero();
   const h = location.hash.slice(1) || "/";
   const parts = h.split("/").filter(Boolean);
   window.scrollTo(0, 0);
