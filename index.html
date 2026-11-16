@@ -195,6 +195,27 @@ a.prov:active{transform:scale(.97)}
 .bio.open{display:block}
 .more{color:var(--ac);font-weight:600;font-size:14px;margin-top:6px}
 .card .y{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tonight{display:flex;align-items:center;gap:14px;padding:14px 16px;margin:0 0 6px;border-radius:16px;background:linear-gradient(120deg,rgba(255,209,102,.16),rgba(230,57,70,.16));border:1px solid rgba(255,209,102,.3);transition:transform .15s,border-color .15s}
+.tonight:hover{transform:translateY(-1px);border-color:rgba(255,209,102,.6)}
+.tonight .dice{font-size:30px}
+.tonight b{font-size:16px}
+.tonight .arr{margin-left:auto;font-size:26px;color:var(--tx2)}
+.tn-h{font-size:24px;letter-spacing:-.4px;margin:4px 0 14px}
+.tn-moods{margin-bottom:8px}
+@media(max-width:699px){.tn-moods,.tn-durs{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;margin-left:-16px;margin-right:-16px;padding:0 16px}.tn-moods::-webkit-scrollbar,.tn-durs::-webkit-scrollbar{display:none}.tn-moods .chip,.tn-durs .chip{white-space:nowrap;flex-shrink:0}}
+.pick{position:relative;border-radius:20px;overflow:hidden;min-height:440px;background:var(--bg2) center 25%/cover no-repeat;margin-top:6px;animation:fade .5s ease}
+.pick::after{content:"";position:absolute;inset:0;background:linear-gradient(to top,rgba(15,17,21,.97) 8%,rgba(15,17,21,.75) 45%,rgba(15,17,21,.15) 85%)}
+.pick-in{position:absolute;z-index:1;left:20px;right:20px;bottom:22px;max-width:640px}
+.pick-why{font-size:12px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:#ffd166}
+.pick-t{font-size:30px;font-weight:800;line-height:1.08;margin:6px 0;letter-spacing:-.6px}
+.pick-m{color:#c9ced8;font-size:14px}
+.pick-tag{font-style:italic;color:#e7e9ee;margin-top:8px;font-size:14px}
+.pick-o{margin-top:8px;color:#d8dce4;font-size:14px;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
+.pick-p{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.pick-p .prov{padding:5px 10px 5px 5px}.pick-p .prov img{width:30px;height:30px}
+.pick-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px}
+.btn.big{padding:11px 18px;font-size:15px;border-radius:12px;display:inline-flex;align-items:center;gap:6px}
+@media(min-width:700px){.pick{min-height:500px}.pick-in{left:36px;bottom:34px}.pick-t{font-size:44px}}
 footer{max-width:1100px;margin:0 auto;padding:0 16px 30px;color:var(--tx3);font-size:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 footer img{height:12px}
 .empty{padding:40px 0;text-align:center;color:var(--tx2)}
@@ -240,6 +261,7 @@ const state = {
   homeProv: LS.get("homeProv", null),
   likes: LS.get("likes", []),        // [{k:"movie:123", title, at}]
   history: LS.get("history", []),    // titoli aperti di recente
+  nope: LS.get("nope", []),          // titoli scartati con "Non fa per me"
   providers: null
 };
 const saveSubs = () => LS.set("subs", [...state.subs]);
@@ -446,6 +468,7 @@ async function viewHome() {
   app.innerHTML = `
     <div class="featwrap" id="feat"><div class="feat sk"></div></div>
     <div class="greet"><h1>${greeting()}, cosa guardiamo ${new Date().getHours() >= 17 || new Date().getHours() < 4 ? "stasera" : "oggi"}? 🍿</h1></div>
+    <a class="tonight" href="#/stasera"><span class="dice">🎲</span><div><b>Proponimi un film</b><div class="muted small">Scegli l'umore, al resto penso io</div></div><span class="arr">›</span></a>
     ${seeds.length ? "" : `<div class="panel tip"><b>❤️ Fammi conoscere i tuoi gusti</b><p class="muted small" style="margin-top:4px">Tocca il cuore sulle locandine dei film e delle serie che ti sono piaciuti: qui comparirà una riga di consigli su misura per te.</p></div>`}
     ${subs.length ? "" : `<div class="panel"><b>Scegli i tuoi abbonamenti</b><p class="muted small" style="margin-top:4px">Così la home ti mostra solo quello che puoi vedere senza pagare altro.</p><a class="cta" href="#/impostazioni">Scegli abbonamenti</a></div>`}
     ${provs.length > 1 ? `<div class="pchips">
@@ -690,6 +713,131 @@ async function viewSearch(q) {
 }
 
 /* ---------- pagina persona: filmografia ---------- */
+/* ================= "Cosa guardo stasera?" ================= */
+const MOODS = [
+  { id: "any", l: "🎲 Sorprendimi", g: "" },
+  { id: "ridere", l: "😂 Ridere", g: "35", no: "27" },
+  { id: "emoz", l: "🥹 Emozionarmi", g: "18|10749", no: "27" },
+  { id: "tens", l: "😰 Tensione", g: "53|9648|80" },
+  { id: "azione", l: "💥 Azione", g: "28|12" },
+  { id: "pensare", l: "🧠 Riflettere", g: "878|99|36" },
+  { id: "famiglia", l: "👨‍👩‍👧 In famiglia", g: "10751|16", no: "27|53|80" },
+  { id: "paura", l: "👻 Paura", g: "27" }
+];
+const DURS = [{ v: 0, l: "Qualsiasi durata" }, { v: 105, l: "Max 1h45" }, { v: 125, l: "Max 2h" }];
+const tonight = { pool: [], key: "", shown: new Set() };
+
+async function buildTonightPool(mood, dur, signal) {
+  const base = { watch_region: REGION, with_watch_monetization_types: "flatrate|free|ads", "vote_average.gte": 6.4, "vote_count.gte": 250, sort_by: "popularity.desc" };
+  if (state.subs.size) base.with_watch_providers = [...state.subs].join("|");
+  if (mood.g) base.with_genres = mood.g;
+  if (mood.no) base.without_genres = mood.no;
+  if (dur) { base["with_runtime.lte"] = dur; base["with_runtime.gte"] = 60; }
+  const pages = [1, 2 + Math.floor(Math.random() * 3), 5 + Math.floor(Math.random() * 5)];
+  const disc = (await Promise.all(pages.map(pg => tmdb("/discover/movie", { ...base, page: pg }, { signal }).then(j => j.results).catch(() => [])))).flat()
+    .map(r => ({ ...r, media_type: "movie", _w: (r.vote_average || 0) }));
+
+  let recs = [];
+  const seeds = tasteSeeds();
+  if (seeds.length) {
+    const want = mood.g ? mood.g.split("|").map(Number) : null, avoid = mood.no ? mood.no.split("|").map(Number) : [];
+    recs = (await recommendFor(seeds, signal, 40).catch(() => []))
+      .filter(r => r.media_type === "movie" && (r.vote_average || 0) >= 6 && (!want || (r.genre_ids || []).some(g => want.includes(g))) && !(r.genre_ids || []).some(g => avoid.includes(g)))
+      .map(r => ({ ...r, _w: (r.vote_average || 0) + 1.5, _rec: true }));
+  }
+  const skip = new Set([...state.likes, ...state.history, ...(state.nope || []).map(k => ({ k }))].map(x => x.k));
+  const map = new Map();
+  for (const r of [...recs, ...disc]) {
+    const k = "movie:" + r.id;
+    if (skip.has(k) || !r.poster_path || !r.backdrop_path || map.has(k)) continue;
+    map.set(k, { ...r, _w: r._w + Math.random() * 2.5 });   // un po' di casualità
+  }
+  return [...map.values()].sort((a, b) => b._w - a._w);
+}
+
+async function pickTonight(mood, dur, signal) {
+  const key = mood.id + "|" + dur + "|" + [...state.subs].join(",");
+  if (tonight.key !== key || tonight.pool.length < 3) {
+    tonight.key = key;
+    tonight.pool = (await buildTonightPool(mood, dur, signal)).filter(r => !tonight.shown.has(r.id));
+  }
+  while (tonight.pool.length) {
+    // scelta casuale pesata tra i primi 8
+    const top = tonight.pool.slice(0, 8), tot = top.reduce((a, r) => a + r._w, 0);
+    let x = Math.random() * tot, idx = 0;
+    for (; idx < top.length - 1; idx++) { x -= top[idx]._w; if (x <= 0) break; }
+    const c = tonight.pool.splice(idx, 1)[0];
+    tonight.shown.add(c.id);
+    const d = await tmdb(`/movie/${c.id}`, { append_to_response: "watch/providers,videos", include_video_language: "it,en" }, { signal });
+    if (dur && d.runtime && d.runtime > dur) continue;
+    const reg = d["watch/providers"]?.results?.[REGION];
+    const inc = reg ? [...(reg.flatrate || []), ...(reg.free || []), ...(reg.ads || [])] : [];
+    const mine = [...new Map(inc.filter(p => !state.subs.size || state.subs.has(p.provider_id)).map(p => [p.provider_id, p])).values()];
+    if (!mine.length) continue;                       // deve essere visibile senza pagare altro
+    return { d, mine, reg, rec: c._rec };
+  }
+  return null;
+}
+
+async function viewTonight() {
+  const signal = newCtrl();
+  if (!state.key) { app.innerHTML = welcomeHTML(); bindWelcome(); return; }
+  const moodId = LS.get("tnMood", "any"), dur = LS.get("tnDur", 0);
+  const mood = MOODS.find(m => m.id === moodId) || MOODS[0];
+  app.innerHTML = `
+    <a class="back" href="#/">← Home</a>
+    <h1 class="tn-h">Cosa guardiamo stasera? 🍿</h1>
+    <div class="tabs tn-moods">${MOODS.map(m => `<button class="chip ${m.id === mood.id ? "on" : ""}" data-mood="${m.id}">${m.l}</button>`).join("")}</div>
+    <div class="tabs tn-durs">${DURS.map(x => `<button class="chip ${x.v === dur ? "on" : ""}" data-dur="${x.v}">⏱ ${x.l}</button>`).join("")}</div>
+    <div id="pick"><div class="pick sk" style="min-height:420px"></div></div>`;
+  app.querySelectorAll("[data-mood]").forEach(b => b.onclick = () => { LS.set("tnMood", b.dataset.mood); viewTonight(); });
+  app.querySelectorAll("[data-dur]").forEach(b => b.onclick = () => { LS.set("tnDur", +b.dataset.dur); viewTonight(); });
+  showPick(mood, dur, signal);
+}
+
+async function showPick(mood, dur, signal) {
+  const box = $("#pick"); if (!box) return;
+  box.innerHTML = `<div class="pick sk" style="min-height:420px"></div>`;
+  let r;
+  try { r = await pickTonight(mood, dur, signal); }
+  catch (e) { if (e.name !== "AbortError") box.innerHTML = errorBox(e); return; }
+  if (signal.aborted || !$("#pick")) return;
+  if (!r) {
+    box.innerHTML = `<div class="panel"><b>Ho finito le idee per questa combinazione 😅</b><p class="muted small" style="margin-top:6px">Prova un altro umore o una durata diversa.</p><button class="cta" id="again">Ricomincia</button></div>`;
+    $("#again").onclick = () => { tonight.shown.clear(); tonight.key = ""; showPick(mood, dur, signal); };
+    return;
+  }
+  const { d, mine, reg, rec } = r;
+  const lk = "movie:" + d.id;
+  const trailer = (d.videos?.results || []).filter(v => v.site === "YouTube" && /Trailer|Teaser/.test(v.type))
+    .sort((a, b) => (b.iso_639_1 === "it") - (a.iso_639_1 === "it") || (b.type === "Trailer") - (a.type === "Trailer"))[0];
+  const meta = [year(d.release_date), d.runtime ? `${Math.floor(d.runtime / 60)}h ${d.runtime % 60}m` : "", (d.genres || []).slice(0, 2).map(g => g.name).join(", "), d.vote_average ? `★ ${d.vote_average.toFixed(1)}` : ""].filter(Boolean).join(" · ");
+  const why = rec && state.likes[0] ? "✨ Scelto in base ai film che ti piacciono" : d.vote_average >= 7.5 ? "🏆 Molto apprezzato dal pubblico" : "🍿 Popolare in questo periodo";
+  box.innerHTML = `
+    <div class="pick" style="background-image:url(${img(d.backdrop_path, "w1280")})">
+      <div class="pick-in">
+        <div class="pick-why">${why}</div>
+        <div class="pick-t">${esc(d.title)}</div>
+        <div class="pick-m">${esc(meta)}</div>
+        ${d.tagline ? `<div class="pick-tag">“${esc(d.tagline)}”</div>` : ""}
+        <p class="pick-o">${esc(d.overview || "")}</p>
+        <div class="pick-p">${mine.slice(0, 4).map(p => { const h = providerLink(p, d.title, reg?.link); return `<a class="prov mine" ${h ? `href="${esc(h)}" target="_blank" rel="noopener"` : ""}><img src="${img(p.logo_path, "w92")}" alt=""><span class="n">${esc(p.provider_name)}</span><span class="go">↗</span></a>`; }).join("")}</div>
+      </div>
+    </div>
+    <div class="pick-actions">
+      <button class="btn pri big" id="next">🎲 Un altro</button>
+      ${trailer ? `<a class="btn big" href="https://www.youtube.com/watch?v=${esc(trailer.key)}" target="_blank" rel="noopener">▶ Trailer</a>` : ""}
+      <button class="btn big likebtn ${isLiked(lk) ? "on" : ""}" data-like="${lk}" data-title="${esc(d.title)}" style="margin:0"><span class="h">♥</span> Mi piace</button>
+      <button class="btn big" id="nope">👎 Non fa per me</button>
+      <a class="btn big" href="#/movie/${d.id}">Scheda completa</a>
+    </div>`;
+  $("#next").onclick = () => showPick(mood, dur, signal);
+  $("#nope").onclick = () => {
+    state.nope = [lk, ...(state.nope || [])].slice(0, 300); LS.set("nope", state.nope);
+    toast("Ok, non te lo proporrò più"); showPick(mood, dur, signal);
+  };
+}
+
 async function viewPerson(id) {
   const signal = newCtrl();
   app.innerHTML = `<div class="person"><div class="pphoto sk"></div><div style="flex:1"><div class="sk" style="height:28px;width:50%;border-radius:6px"></div></div></div>${skeletonGrid(8)}`;
@@ -1011,6 +1159,7 @@ function route() {
   if (parts[0] === "impostazioni") return viewSettings();
   if ((parts[0] === "movie" || parts[0] === "tv") && parts[1]) return viewDetail(parts[0], parts[1]);
   if (parts[0] === "person" && parts[1]) return viewPerson(parts[1]);
+  if (parts[0] === "stasera") return viewTonight();
   if (parts[0] === "cerca" && parts[1]) {
     const q = decodeURIComponent(parts[1]);
     if (qIn.value.trim() !== q) qIn.value = q;
