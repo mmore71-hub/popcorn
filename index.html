@@ -332,7 +332,7 @@ const rowSkeleton = n => Array.from({ length: n }, () => `<div class="card"><div
 
 async function viewHome() {
   const signal = newCtrl(); stopHero();
-  if (!state.key) { app.innerHTML = welcomeHTML(); return; }
+  if (!state.key) { app.innerHTML = welcomeHTML(); bindWelcome(); return; }
 
   const subs = [...state.subs];
   let provs = [];
@@ -450,8 +450,56 @@ function welcomeHTML() {
   return `<div class="panel" style="max-width:620px">
     <h2 style="margin-top:0">Benvenuto su Popcorn 🍿</h2>
     <p class="muted">Cerca un film o una serie e scopri subito su quale piattaforma lo trovi in Italia.</p>
-    <p class="muted small" style="margin-top:10px">Per iniziare serve una chiave API gratuita di TMDB: registrati su <a href="https://www.themoviedb.org/signup" target="_blank" rel="noopener"><u>themoviedb.org</u></a>, poi vai in <i>Impostazioni → API</i> e copia la chiave (va bene sia la "API Key" sia il "Read Access Token").</p>
-    <a class="cta" href="#/impostazioni">Inserisci la chiave</a></div>`;
+    <div style="margin-top:16px"><b>Hai già configurato Popcorn su un altro dispositivo?</b>
+      <p class="muted small" style="margin:4px 0 10px">Copia il link di configurazione (dal messaggio che ti sei mandato) e incollalo qui. Funziona anche con la sola chiave TMDB.</p>
+      <div class="field">
+        <input id="cfg" type="text" placeholder="Incolla il link o la chiave" autocomplete="off" spellcheck="false" style="font-family:inherit">
+        <button class="btn" id="paste">📋 Incolla</button>
+        <button class="btn pri" id="cfgok">Configura</button>
+      </div>
+      <div class="status" id="cst"></div>
+    </div>
+    <p class="muted small" style="margin-top:18px">Prima volta? Serve una chiave API gratuita di TMDB: registrati su <a href="https://www.themoviedb.org/signup" target="_blank" rel="noopener"><u>themoviedb.org</u></a>, poi vai in <i>Impostazioni → API</i> e copia la chiave.</p>
+    <a class="cta" href="#/impostazioni">Vai alle impostazioni</a></div>`;
+}
+function bindWelcome() {
+  const inp = $("#cfg"); if (!inp) return;
+  $("#paste").onclick = async () => {
+    try { inp.value = (await navigator.clipboard.readText()).trim(); $("#cfgok").click(); }
+    catch { $("#cst").innerHTML = `<span class="muted">Tieni premuto nel campo e scegli "Incolla".</span>`; inp.focus(); }
+  };
+  $("#cfgok").onclick = async () => {
+    const st = $("#cst"), r = parseSetup(inp.value);
+    if (!r) { st.innerHTML = `<span style="color:var(--warn)">Incolla il link di configurazione o la chiave.</span>`; return; }
+    st.textContent = "Verifico…";
+    const prev = state.key; state.key = r.key;
+    try {
+      await tmdb("/configuration", {}, { ttl: 0 });
+      applySetup(r);
+      toast("✓ Popcorn è configurato su questo dispositivo");
+      viewHome();
+    } catch (e) {
+      state.key = prev;
+      st.innerHTML = `<span style="color:var(--warn)">${e.message === "BADKEY" ? "Chiave non valida." : "Errore di rete: " + esc(e.message)}</span>`;
+    }
+  };
+  inp.addEventListener("keydown", e => { if (e.key === "Enter") $("#cfgok").click(); });
+}
+/* accetta un link "…#/setup?k=…&s=…" oppure la sola chiave */
+function parseSetup(text) {
+  text = (text || "").trim(); if (!text) return null;
+  const m = text.match(/#\/setup\?(.*)$/);
+  if (m) {
+    const prm = new URLSearchParams(m[1]);
+    const key = (prm.get("k") || "").trim();
+    return key ? { key, subs: (prm.get("s") || "").split(",").map(Number).filter(Boolean) } : null;
+  }
+  return /^[A-Za-z0-9._-]{20,}$/.test(text) ? { key: text, subs: null } : null;
+}
+function applySetup(r) {
+  state.key = r.key; LS.set("tmdbKey", r.key);
+  if (r.subs) { state.subs = new Set(r.subs); saveSubs(); }
+  state.providers = null; cacheClear();
 }
 
 /* ---------- ricerca tollerante agli errori di battitura ---------- */
@@ -690,15 +738,10 @@ function route() {
   const parts = h.split("/").filter(Boolean);
   window.scrollTo(0, 0);
   if (parts[0] && parts[0].startsWith("setup")) {          // link di configurazione da un altro dispositivo
-    const prm = new URLSearchParams(h.split("?")[1] || "");
-    const k = (prm.get("k") || "").trim();
-    if (k) {
-      state.key = k; LS.set("tmdbKey", k);
-      state.subs = new Set((prm.get("s") || "").split(",").map(Number).filter(Boolean)); saveSubs();
-      state.providers = null; cacheClear();
-    }
+    const r = parseSetup(location.href);
+    if (r) applySetup(r);
     history.replaceState(null, "", location.pathname + "#/");   // toglie la chiave dalla barra degli indirizzi
-    toast(k ? "✓ Popcorn è configurato su questo dispositivo" : "Link di configurazione non valido");
+    toast(r ? "✓ Popcorn è configurato su questo dispositivo" : "Link di configurazione non valido");
     return viewHome();
   }
   if (parts[0] === "impostazioni") return viewSettings();
