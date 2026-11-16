@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f1115">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Popcorn">
+<title>Popcorn</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="icon" href="icon-192.png" sizes="192x192" type="image/png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="preconnect" href="https://api.themoviedb.org">
+<link rel="preconnect" href="https://image.tmdb.org">
+<style>
+:root{
+  --bg:#0f1115;--bg2:#171a21;--bg3:#1f232c;--line:#2a2f3a;
+  --tx:#eef0f4;--tx2:#a3a9b6;--tx3:#6b7280;
+  --ac:#4f8cff;--ac2:#2f6fe8;--ok:#22c55e;--warn:#f59e0b;
+  --r:14px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:var(--bg);color:var(--tx);font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:inherit;text-decoration:none}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+img{display:block}
+
+/* header */
+header{position:sticky;top:0;z-index:10;background:rgba(15,17,21,.85);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid var(--line);padding:calc(10px + env(safe-area-inset-top)) 16px 10px}
+.bar{max-width:1100px;margin:0 auto;display:flex;gap:10px;align-items:center}
+.logo{font-weight:700;font-size:17px;white-space:nowrap;letter-spacing:-.2px}
+.logo{display:flex;align-items:center;gap:8px}
+.logo img{width:30px;height:30px;border-radius:8px}
+.search{flex:1;position:relative}
+@media(max-width:480px){.logo .lt{display:none}}
+.search input{width:100%;background:var(--bg3);border:1px solid var(--line);border-radius:999px;padding:10px 38px 10px 40px;color:var(--tx);font-size:15px;outline:none;transition:border-color .15s}
+.search input:focus{border-color:var(--ac)}
+.search svg{position:absolute;left:14px;top:50%;transform:translateY(-50%);opacity:.5}
+.search .clr{position:absolute;right:8px;top:50%;transform:translateY(-50%);width:26px;height:26px;border-radius:50%;display:none;place-items:center;color:var(--tx2)}
+.search.has .clr{display:grid}
+.iconbtn{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;background:var(--bg3);border:1px solid var(--line);flex-shrink:0}
+.iconbtn:hover{border-color:var(--tx3)}
+
+main{max-width:1100px;margin:0 auto;padding:16px 16px calc(40px + env(safe-area-inset-bottom))}
+h2{font-size:18px;margin:6px 0 12px;letter-spacing:-.2px}
+.muted{color:var(--tx2)}
+.small{font-size:13px}
+
+/* tabs / chips */
+.tabs{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}
+.chip{padding:7px 14px;border-radius:999px;background:var(--bg3);border:1px solid var(--line);font-size:14px;color:var(--tx2)}
+.chip.on{background:var(--ac);border-color:var(--ac);color:#fff}
+
+/* grid */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:14px}
+@media(min-width:700px){.grid{grid-template-columns:repeat(auto-fill,minmax(160px,1fr))}}
+.card{display:block;border-radius:var(--r);overflow:hidden;background:var(--bg2);border:1px solid var(--line);transition:transform .12s,border-color .12s}
+.card:hover{transform:translateY(-2px);border-color:var(--tx3)}
+.poster{aspect-ratio:2/3;background:var(--bg3) center/cover no-repeat;position:relative}
+.poster img{width:100%;height:100%;object-fit:cover}
+.poster .noimg{position:absolute;inset:0;display:grid;place-items:center;color:var(--tx3);font-size:12px;padding:10px;text-align:center}
+.badge{position:absolute;top:8px;left:8px;background:rgba(0,0,0,.7);font-size:11px;padding:2px 7px;border-radius:6px;font-weight:600}
+.minis{position:absolute;bottom:8px;left:8px;right:8px;display:flex;gap:4px;flex-wrap:wrap}
+.minis img{width:24px;height:24px;border-radius:6px;box-shadow:0 1px 4px rgba(0,0,0,.6)}
+.card .meta{padding:9px 10px 11px}
+.card .t{font-weight:600;font-size:14px;line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.card .y{font-size:12px;color:var(--tx3);margin-top:2px}
+
+/* skeleton */
+.sk{background:linear-gradient(90deg,var(--bg2) 0,var(--bg3) 50%,var(--bg2) 100%);background-size:200% 100%;animation:sh 1.2s infinite}
+@keyframes sh{to{background-position:-200% 0}}
+
+/* panels */
+.panel{background:var(--bg2);border:1px solid var(--line);border-radius:var(--r);padding:16px;margin-bottom:16px}
+.cta{display:inline-block;margin-top:10px;background:var(--ac);color:#fff;padding:9px 16px;border-radius:10px;font-weight:600}
+.cta:hover{background:var(--ac2)}
+
+/* detail */
+.hero{position:relative;margin:-16px -16px 0;min-height:200px;background:var(--bg2) center/cover no-repeat}
+.hero::after{content:"";position:absolute;inset:0;background:linear-gradient(to bottom,rgba(15,17,21,.3),var(--bg) 95%)}
+.dwrap{position:relative;z-index:1;display:flex;gap:18px;margin-top:-110px;align-items:flex-end}
+.dwrap .poster{width:120px;flex-shrink:0;border-radius:12px;overflow:hidden;box-shadow:0 8px 30px rgba(0,0,0,.5)}
+@media(min-width:700px){.dwrap .poster{width:170px}.hero{min-height:300px}.dwrap{margin-top:-160px}}
+.dtitle{font-size:24px;font-weight:700;line-height:1.15;letter-spacing:-.4px}
+@media(min-width:700px){.dtitle{font-size:32px}}
+.dsub{color:var(--tx2);margin-top:6px;font-size:14px}
+.overview{margin:18px 0;color:#d3d7df;max-width:760px}
+.back{display:inline-flex;align-items:center;gap:6px;color:var(--tx2);margin-bottom:10px;position:relative;z-index:2}
+.sec{margin-top:20px}
+.sec h3{font-size:13px;text-transform:uppercase;letter-spacing:.6px;color:var(--tx2);margin-bottom:10px;font-weight:600}
+.provs{display:flex;flex-wrap:wrap;gap:10px}
+.prov{display:flex;align-items:center;gap:10px;background:var(--bg2);border:1px solid var(--line);border-radius:12px;padding:7px 12px 7px 7px}
+.prov img{width:38px;height:38px;border-radius:9px}
+.prov .n{font-size:14px;font-weight:500}
+.prov.mine{border-color:var(--ok);background:rgba(34,197,94,.08)}
+.prov.mine .n::after{content:" ✓";color:var(--ok)}
+.yes{background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.35);color:#86efac;padding:10px 14px;border-radius:12px;font-weight:600;display:inline-block}
+.no{background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);color:#fcd34d;padding:10px 14px;border-radius:12px;display:inline-block}
+
+/* settings */
+.field{display:flex;gap:8px;flex-wrap:wrap}
+.field input{flex:1;min-width:200px;background:var(--bg3);border:1px solid var(--line);border-radius:10px;padding:10px 12px;color:var(--tx);font-size:14px;outline:none;font-family:ui-monospace,Menlo,monospace}
+.field input:focus{border-color:var(--ac)}
+.btn{background:var(--bg3);border:1px solid var(--line);padding:9px 14px;border-radius:10px;font-weight:600}
+.btn.pri{background:var(--ac);border-color:var(--ac);color:#fff}
+.status{margin-top:8px;font-size:13px}
+.pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-top:12px}
+.pitem{display:flex;align-items:center;gap:10px;padding:8px;border-radius:12px;background:var(--bg3);border:1.5px solid transparent;text-align:left;transition:border-color .12s,background .12s}
+.pitem img{width:36px;height:36px;border-radius:8px;flex-shrink:0}
+.pitem .n{font-size:13px;line-height:1.2;flex:1}
+.pitem .ck{width:20px;height:20px;border-radius:50%;border:1.5px solid var(--tx3);flex-shrink:0;display:grid;place-items:center;font-size:12px}
+.pitem.on{border-color:var(--ac);background:rgba(79,140,255,.1)}
+.pitem.on .ck{background:var(--ac);border-color:var(--ac);color:#fff}
+.toggle{display:flex;align-items:center;gap:10px;cursor:pointer;user-select:none}
+.toggle input{width:18px;height:18px;accent-color:var(--ac)}
+.row{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+
+footer{max-width:1100px;margin:0 auto;padding:0 16px 30px;color:var(--tx3);font-size:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+footer img{height:12px}
+.empty{padding:40px 0;text-align:center;color:var(--tx2)}
+</style>
+</head>
+<body>
+<header>
+  <div class="bar">
+    <a href="#/" class="logo"><img src="icon.svg" alt=""><span class="lt">Popcorn</span></a>
+    <div class="search" id="sbox">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input id="q" type="search" placeholder="Cerca un film o una serie…" autocomplete="off" enterkeyhint="search">
+      <button class="clr" id="clr" aria-label="Cancella">✕</button>
+    </div>
+    <a href="#/impostazioni" class="iconbtn" title="Impostazioni" aria-label="Impostazioni">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+    </a>
+  </div>
+</header>
+
+<main id="app"></main>
+
+<footer>
+  <span>Dati di disponibilità forniti da <a href="https://www.justwatch.com/it" target="_blank" rel="noopener"><b>JustWatch</b></a>.</span>
+  <span>Questo prodotto usa l'API di TMDB ma non è approvato né certificato da TMDB.</span>
+</footer>
+
+<script>
+"use strict";
+/* ================= config & storage ================= */
+const API = "https://api.themoviedb.org/3";
+const IMG = "https://image.tmdb.org/t/p/";
+const REGION = "IT";
+const TTL = { short: 6 * 3600e3, long: 7 * 24 * 3600e3 };
+
+const LS = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { cacheClear(); try { localStorage.setItem(k, JSON.stringify(v)); } catch {} } }
+};
+const state = {
+  key: LS.get("tmdbKey", ""),
+  subs: new Set(LS.get("subs", [])),
+  homeTab: LS.get("homeTab", "movie"),
+  providers: null
+};
+const saveSubs = () => LS.set("subs", [...state.subs]);
+
+/* ================= cache ================= */
+const mem = new Map();
+function cacheGet(k) {
+  if (mem.has(k)) { const e = mem.get(k); if (e.x > Date.now()) return e.v; }
+  const e = LS.get("c:" + k, null);
+  if (e && e.x > Date.now()) { mem.set(k, e); return e.v; }
+  return undefined;
+}
+function cacheSet(k, v, ttl) {
+  const e = { v, x: Date.now() + ttl };
+  mem.set(k, e);
+  try { localStorage.setItem("c:" + k, JSON.stringify(e)); }
+  catch { cacheClear(); }
+}
+function cacheClear() {
+  try { Object.keys(localStorage).filter(k => k.startsWith("c:")).forEach(k => localStorage.removeItem(k)); } catch {}
+}
+
+/* ================= TMDB client ================= */
+async function tmdb(path, params = {}, { ttl = TTL.short, signal } = {}) {
+  if (!state.key) throw new Error("NOKEY");
+  const u = new URL(API + path);
+  u.searchParams.set("language", "it-IT");
+  for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== "") u.searchParams.set(k, v);
+  const ck = u.pathname.replace("/3", "") + u.search;
+  const hit = ttl ? cacheGet(ck) : undefined;
+  if (hit !== undefined) return hit;
+
+  const isToken = state.key.startsWith("eyJ");      // v4 Read Access Token
+  if (!isToken) u.searchParams.set("api_key", state.key);
+  const r = await fetch(u, { signal, headers: isToken ? { Authorization: "Bearer " + state.key, accept: "application/json" } : { accept: "application/json" } });
+  if (r.status === 401) throw new Error("BADKEY");
+  if (!r.ok) throw new Error("HTTP " + r.status);
+  const j = await r.json();
+  if (ttl) cacheSet(ck, j, ttl);
+  return j;
+}
+
+/* ================= helpers ================= */
+const $ = s => document.querySelector(s);
+const app = $("#app");
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const year = d => (d || "").slice(0, 4);
+const img = (p, size) => p ? IMG + size + p : "";
+
+function errorBox(e) {
+  if (e.message === "NOKEY" || e.message === "BADKEY") {
+    return `<div class="panel"><b>${e.message === "NOKEY" ? "Manca la chiave TMDB" : "La chiave TMDB non è valida"}</b>
+      <p class="muted small" style="margin-top:6px">Serve una chiave API gratuita di TMDB per cercare i titoli.</p>
+      <a class="cta" href="#/impostazioni">Vai alle impostazioni</a></div>`;
+  }
+  return `<div class="panel"><b>Qualcosa è andato storto</b><p class="muted small" style="margin-top:6px">${esc(e.message)}</p></div>`;
+}
+
+function cardHTML(it, type) {
+  const t = type || it.media_type;
+  const title = it.title || it.name;
+  const y = year(it.release_date || it.first_air_date);
+  const p = img(it.poster_path, "w342");
+  return `<a class="card" href="#/${t}/${it.id}" data-k="${t}:${it.id}">
+    <div class="poster">${p ? `<img loading="lazy" src="${p}" alt="">` : `<div class="noimg">${esc(title)}</div>`}
+      <span class="badge">${t === "tv" ? "Serie" : "Film"}</span><div class="minis"></div></div>
+    <div class="meta"><div class="t">${esc(title)}</div><div class="y">${y || "—"}</div></div></a>`;
+}
+const skeletonGrid = n => `<div class="grid">${Array.from({ length: n }, () => `<div class="card"><div class="poster sk"></div><div class="meta"><div class="sk" style="height:12px;border-radius:4px;width:80%"></div></div></div>`).join("")}</div>`;
+
+/* Shows logos of the user's subscriptions on each card (only flatrate/free/ads) */
+async function decorateCards(root, signal) {
+  if (!state.subs.size) return;
+  const cards = [...root.querySelectorAll(".card[data-k]")].slice(0, 20);
+  await Promise.all(cards.map(async c => {
+    const [t, id] = c.dataset.k.split(":");
+    try {
+      const j = await tmdb(`/${t}/${id}/watch/providers`, {}, { signal });
+      const reg = j.results?.[REGION]; if (!reg) return;
+      const inc = [...(reg.flatrate || []), ...(reg.free || []), ...(reg.ads || [])].filter(p => state.subs.has(p.provider_id));
+      const uniq = [...new Map(inc.map(p => [p.provider_id, p])).values()];
+      if (uniq.length) c.querySelector(".minis").innerHTML = uniq.slice(0, 5).map(p => `<img src="${img(p.logo_path, "w92")}" alt="${esc(p.provider_name)}" title="${esc(p.provider_name)}">`).join("");
+    } catch {}
+  }));
+}
+
+async function loadProviders() {
+  if (state.providers) return state.providers;
+  const [m, t] = await Promise.all([
+    tmdb("/watch/providers/movie", { watch_region: REGION }, { ttl: TTL.long }),
+    tmdb("/watch/providers/tv", { watch_region: REGION }, { ttl: TTL.long })
+  ]);
+  const map = new Map();
+  for (const p of [...m.results, ...t.results]) {
+    const prio = p.display_priorities?.[REGION] ?? p.display_priority ?? 999;
+    const old = map.get(p.provider_id);
+    if (!old || prio < old.prio) map.set(p.provider_id, { id: p.provider_id, name: p.provider_name, logo: p.logo_path, prio });
+  }
+  state.providers = [...map.values()].sort((a, b) => a.prio - b.prio);
+  return state.providers;
+}
+
+/* ================= views ================= */
+let ctrl = null;
+const newCtrl = () => { ctrl?.abort(); ctrl = new AbortController(); return ctrl.signal; };
+
+async function viewHome() {
+  const signal = newCtrl();
+  if (!state.key) { app.innerHTML = welcomeHTML(); return; }
+  const mine = state.subs.size > 0;
+  const tab = state.homeTab;
+  app.innerHTML = `
+    ${mine ? "" : `<div class="panel"><b>Scegli i tuoi abbonamenti</b><p class="muted small" style="margin-top:4px">Così ti mostro cosa puoi vedere senza pagare altro e metto in evidenza le tue piattaforme.</p><a class="cta" href="#/impostazioni">Scegli abbonamenti</a></div>`}
+    <h2>${mine ? "Popolari sui tuoi abbonamenti" : "Di tendenza questa settimana"}</h2>
+    <div class="tabs">
+      <button class="chip ${tab === "movie" ? "on" : ""}" data-tab="movie">Film</button>
+      <button class="chip ${tab === "tv" ? "on" : ""}" data-tab="tv">Serie TV</button>
+    </div>
+    <div id="hgrid">${skeletonGrid(12)}</div>`;
+  app.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => { state.homeTab = b.dataset.tab; LS.set("homeTab", state.homeTab); viewHome(); });
+  try {
+    const j = mine
+      ? await tmdb(`/discover/${tab}`, { watch_region: REGION, with_watch_providers: [...state.subs].join("|"), with_watch_monetization_types: "flatrate|free|ads", sort_by: "popularity.desc" }, { signal })
+      : await tmdb(`/trending/${tab}/week`, {}, { signal });
+    const g = $("#hgrid");
+    if (!g) return;
+    g.innerHTML = j.results.length ? `<div class="grid">${j.results.map(it => cardHTML(it, tab)).join("")}</div>` : `<div class="empty">Nessun titolo trovato.</div>`;
+    decorateCards(g, signal);
+  } catch (e) { if (e.name !== "AbortError") $("#hgrid").innerHTML = errorBox(e); }
+}
+
+function welcomeHTML() {
+  return `<div class="panel" style="max-width:620px">
+    <h2 style="margin-top:0">Benvenuto su Popcorn 🍿</h2>
+    <p class="muted">Cerca un film o una serie e scopri subito su quale piattaforma lo trovi in Italia.</p>
+    <p class="muted small" style="margin-top:10px">Per iniziare serve una chiave API gratuita di TMDB: registrati su <a href="https://www.themoviedb.org/signup" target="_blank" rel="noopener"><u>themoviedb.org</u></a>, poi vai in <i>Impostazioni → API</i> e copia la chiave (va bene sia la "API Key" sia il "Read Access Token").</p>
+    <a class="cta" href="#/impostazioni">Inserisci la chiave</a></div>`;
+}
+
+async function viewSearch(q) {
+  const signal = newCtrl();
+  app.innerHTML = `<h2>Risultati per “${esc(q)}”</h2>${skeletonGrid(8)}`;
+  try {
+    const j = await tmdb("/search/multi", { query: q, include_adult: "false", region: REGION }, { signal });
+    const items = j.results.filter(r => r.media_type === "movie" || r.media_type === "tv");
+    app.innerHTML = `<h2>Risultati per “${esc(q)}”</h2>` + (items.length ? `<div class="grid">${items.map(it => cardHTML(it)).join("")}</div>` : `<div class="empty">Nessun risultato. Prova con il titolo originale.</div>`);
+    decorateCards(app, signal);
+  } catch (e) { if (e.name !== "AbortError") app.innerHTML = errorBox(e); }
+}
+
+async function viewDetail(type, id) {
+  const signal = newCtrl();
+  app.innerHTML = `<div class="hero sk"></div><div class="dwrap"><div class="poster sk"></div><div style="flex:1"><div class="sk" style="height:28px;width:60%;border-radius:6px"></div></div></div>`;
+  try {
+    const d = await tmdb(`/${type}/${id}`, { append_to_response: "watch/providers" }, { signal });
+    const title = d.title || d.name;
+    const orig = d.original_title || d.original_name;
+    const y = year(d.release_date || d.first_air_date);
+    const info = [y,
+      type === "movie" && d.runtime ? `${Math.floor(d.runtime / 60)}h ${d.runtime % 60}m` : "",
+      type === "tv" && d.number_of_seasons ? `${d.number_of_seasons} stagion${d.number_of_seasons > 1 ? "i" : "e"}` : "",
+      (d.genres || []).slice(0, 3).map(g => g.name).join(", "),
+      d.vote_average ? `★ ${d.vote_average.toFixed(1)}` : ""
+    ].filter(Boolean).join(" · ");
+
+    const reg = d["watch/providers"]?.results?.[REGION];
+    app.innerHTML = `
+      <div class="hero" style="${d.backdrop_path ? `background-image:url(${img(d.backdrop_path, "w1280")})` : ""}"></div>
+      <div class="dwrap">
+        <div class="poster">${d.poster_path ? `<img src="${img(d.poster_path, "w342")}" alt="">` : `<div class="noimg">${esc(title)}</div>`}</div>
+        <div>
+          <a class="back" href="javascript:history.back()">← Indietro</a>
+          <div class="dtitle">${esc(title)}</div>
+          ${orig && orig !== title ? `<div class="dsub">${esc(orig)}</div>` : ""}
+          <div class="dsub">${esc(info)}</div>
+        </div>
+      </div>
+      ${d.overview ? `<p class="overview">${esc(d.overview)}</p>` : ""}
+      ${providersHTML(reg)}`;
+  } catch (e) { if (e.name !== "AbortError") app.innerHTML = errorBox(e); }
+}
+
+function providersHTML(reg) {
+  if (!reg) return `<div class="sec"><div class="no">Al momento non risulta disponibile su nessuna piattaforma in Italia.</div></div>`;
+  const uniq = arr => [...new Map((arr || []).map(p => [p.provider_id, p])).values()].sort((a, b) => (a.display_priority ?? 99) - (b.display_priority ?? 99));
+  const included = uniq([...(reg.flatrate || []), ...(reg.free || []), ...(reg.ads || [])]);
+  const mine = included.filter(p => state.subs.has(p.provider_id));
+  const others = included.filter(p => !state.subs.has(p.provider_id));
+  const rent = uniq(reg.rent), buy = uniq(reg.buy);
+  const pill = p => `<div class="prov ${state.subs.has(p.provider_id) ? "mine" : ""}"><img src="${img(p.logo_path, "w92")}" alt=""><span class="n">${esc(p.provider_name)}</span></div>`;
+  const sec = (t, arr) => arr.length ? `<div class="sec"><h3>${t}</h3><div class="provs">${arr.map(pill).join("")}</div></div>` : "";
+
+  let head = "";
+  if (state.subs.size) {
+    head = mine.length
+      ? `<div class="sec"><div class="yes">✓ Incluso in ${mine.map(p => esc(p.provider_name)).join(", ")}</div></div>`
+      : `<div class="sec"><div class="no">Non è incluso nei tuoi abbonamenti.</div></div>`;
+  }
+  return head
+    + sec(state.subs.size ? "Nei tuoi abbonamenti" : "In abbonamento", state.subs.size ? mine : included)
+    + (state.subs.size ? sec("Altre piattaforme in abbonamento", others) : "")
+    + sec("Noleggio", rent)
+    + sec("Acquisto", buy)
+    + (reg.link ? `<p class="small muted" style="margin-top:18px"><a href="${esc(reg.link)}" target="_blank" rel="noopener"><u>Apri la pagina con i link alle piattaforme →</u></a></p>` : "");
+}
+
+async function viewSettings() {
+  newCtrl();
+  app.innerHTML = `
+    <h2>Impostazioni</h2>
+    <div class="panel">
+      <b>Chiave TMDB</b>
+      <p class="muted small" style="margin:4px 0 10px">Va bene sia la "API Key" (v3) sia il "Read Access Token" (v4). Resta salvata solo su questo dispositivo.</p>
+      <div class="field">
+        <input id="key" type="password" placeholder="Incolla qui la chiave" value="${esc(state.key)}" autocomplete="off" spellcheck="false">
+        <button class="btn" id="show">Mostra</button>
+        <button class="btn pri" id="savekey">Salva</button>
+      </div>
+      <div class="status" id="kst"></div>
+    </div>
+    <div class="panel">
+      <div class="row">
+        <div><b>I miei abbonamenti</b> <span class="muted small" id="cnt"></span></div>
+        <button class="btn small" id="none">Deseleziona tutti</button>
+      </div>
+      <div class="field" style="margin-top:12px"><input id="pf" type="search" placeholder="Filtra piattaforme…" style="font-family:inherit"></div>
+      <div id="plist">${state.key ? `<div class="muted small" style="margin-top:12px">Carico le piattaforme…</div>` : `<div class="muted small" style="margin-top:12px">Inserisci prima la chiave TMDB.</div>`}</div>
+    </div>`;
+
+  const keyIn = $("#key");
+  $("#show").onclick = () => { keyIn.type = keyIn.type === "password" ? "text" : "password"; $("#show").textContent = keyIn.type === "password" ? "Mostra" : "Nascondi"; };
+  $("#savekey").onclick = async () => {
+    const k = keyIn.value.trim(), st = $("#kst");
+    if (!k) { st.innerHTML = `<span style="color:var(--warn)">Inserisci una chiave.</span>`; return; }
+    st.textContent = "Verifico…";
+    const prev = state.key; state.key = k;
+    try {
+      await tmdb("/configuration", {}, { ttl: 0 });
+      LS.set("tmdbKey", k); state.providers = null; cacheClear();
+      st.innerHTML = `<span style="color:var(--ok)">✓ Chiave valida e salvata.</span>`;
+      renderProviders();
+    } catch (e) {
+      state.key = prev;
+      st.innerHTML = `<span style="color:var(--warn)">${e.message === "BADKEY" ? "Chiave non valida." : "Errore di rete: " + esc(e.message)}</span>`;
+    }
+  };
+  $("#none").onclick = () => { state.subs.clear(); saveSubs(); renderProviders(); };
+  $("#pf").oninput = () => renderProviders();
+  if (state.key) renderProviders();
+}
+
+async function renderProviders() {
+  const box = $("#plist"); if (!box) return;
+  let list;
+  try { list = await loadProviders(); } catch (e) { box.innerHTML = errorBox(e); return; }
+  const f = ($("#pf")?.value || "").trim().toLowerCase();
+  const shown = list.filter(p => !f || p.name.toLowerCase().includes(f));
+  $("#cnt").textContent = state.subs.size ? `· ${state.subs.size} selezionat${state.subs.size === 1 ? "o" : "i"}` : "";
+  box.innerHTML = `<div class="pgrid">${shown.map(p => `
+    <button class="pitem ${state.subs.has(p.id) ? "on" : ""}" data-id="${p.id}">
+      <img loading="lazy" src="${img(p.logo, "w92")}" alt=""><span class="n">${esc(p.name)}</span><span class="ck">${state.subs.has(p.id) ? "✓" : ""}</span>
+    </button>`).join("")}</div>${shown.length ? "" : `<div class="empty">Nessuna piattaforma trovata.</div>`}`;
+  box.querySelectorAll(".pitem").forEach(b => b.onclick = () => {
+    const id = +b.dataset.id;
+    state.subs.has(id) ? state.subs.delete(id) : state.subs.add(id);
+    saveSubs();
+    b.classList.toggle("on"); b.querySelector(".ck").textContent = state.subs.has(id) ? "✓" : "";
+    $("#cnt").textContent = state.subs.size ? `· ${state.subs.size} selezionat${state.subs.size === 1 ? "o" : "i"}` : "";
+  });
+}
+
+/* ================= router & search box ================= */
+const qIn = $("#q"), sbox = $("#sbox");
+function route() {
+  const h = location.hash.slice(1) || "/";
+  const parts = h.split("/").filter(Boolean);
+  window.scrollTo(0, 0);
+  if (parts[0] === "impostazioni") return viewSettings();
+  if ((parts[0] === "movie" || parts[0] === "tv") && parts[1]) return viewDetail(parts[0], parts[1]);
+  if (parts[0] === "cerca" && parts[1]) {
+    const q = decodeURIComponent(parts[1]);
+    if (qIn.value !== q) qIn.value = q;
+    sbox.classList.toggle("has", !!q);
+    return viewSearch(q);
+  }
+  qIn.value = ""; sbox.classList.remove("has");
+  return viewHome();
+}
+let deb;
+qIn.addEventListener("input", () => {
+  const q = qIn.value.trim();
+  sbox.classList.toggle("has", !!qIn.value);
+  clearTimeout(deb);
+  deb = setTimeout(() => {
+    const target = q.length >= 2 ? "#/cerca/" + encodeURIComponent(q) : "#/";
+    if (location.hash.startsWith("#/cerca/")) history.replaceState(null, "", target), route();
+    else location.hash = target;
+  }, 250);
+});
+qIn.addEventListener("keydown", e => { if (e.key === "Enter") qIn.blur(); });
+$("#clr").onclick = () => { qIn.value = ""; sbox.classList.remove("has"); location.hash = "#/"; qIn.focus(); };
+window.addEventListener("hashchange", route);
+route();
+</script>
+</body>
+</html>
