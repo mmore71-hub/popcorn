@@ -786,11 +786,41 @@ async function viewSettings() {
         <button class="btn" id="copy" ${state.key ? "" : "disabled"}>Copia link</button>
       </div>
       <div class="status" id="lst"></div>
+      <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--line)">
+        <b class="small">Hai ricevuto un link da un altro dispositivo?</b>
+        <p class="muted small" style="margin:4px 0 10px">Incollalo qui: importa chiave, abbonamenti e preferiti.</p>
+        <div class="field">
+          <input id="imp" type="text" placeholder="Incolla il link di configurazione" autocomplete="off" spellcheck="false" style="font-family:inherit">
+          <button class="btn" id="imppaste">📋 Incolla</button>
+          <button class="btn pri" id="impok">Importa</button>
+        </div>
+        <div class="status" id="ist"></div>
+      </div>
     </div>`;
 
   const keyIn = $("#key");
   $("#show").onclick = () => { keyIn.type = keyIn.type === "password" ? "text" : "password"; $("#show").textContent = keyIn.type === "password" ? "Mostra" : "Nascondi"; };
+  $("#imppaste").onclick = async () => {
+    try { $("#imp").value = (await navigator.clipboard.readText()).trim(); $("#impok").click(); }
+    catch { $("#ist").innerHTML = `<span class="muted">Tieni premuto nel campo e scegli "Incolla".</span>`; $("#imp").focus(); }
+  };
+  $("#impok").onclick = async () => {
+    const st = $("#ist"), r = parseSetup($("#imp").value);
+    if (!r) { st.innerHTML = `<span style="color:var(--warn)">Non sembra un link di configurazione valido.</span>`; return; }
+    st.textContent = "Verifico…";
+    const prev = state.key; state.key = r.key;
+    try {
+      await tmdb("/configuration", {}, { ttl: 0 });
+      applySetup(r);
+      toast(`✓ Importato${r.likes?.length ? ` (${r.likes.length} preferiti)` : ""}`);
+      viewSettings();
+    } catch (e) {
+      state.key = prev;
+      st.innerHTML = `<span style="color:var(--warn)">${e.message === "BADKEY" ? "La chiave nel link non è valida." : "Errore di rete: " + esc(e.message)}</span>`;
+    }
+  };
   $("#savekey").onclick = async () => {
+    if (/#\/setup\?/.test(keyIn.value)) { $("#imp").value = keyIn.value; keyIn.value = state.key; return $("#impok").click(); }  // link incollato nel campo chiave
     const k = keyIn.value.trim(), st = $("#kst");
     if (!k) { st.innerHTML = `<span style="color:var(--warn)">Inserisci una chiave.</span>`; return; }
     st.textContent = "Verifico…";
