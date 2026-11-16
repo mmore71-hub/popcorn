@@ -299,12 +299,63 @@ function welcomeHTML() {
     <a class="cta" href="#/impostazioni">Inserisci la chiave</a></div>`;
 }
 
+/* ---------- ricerca tollerante agli errori di battitura ---------- */
+const norm = s => (s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+function sim(q, t) {                       // somiglianza 0..1 (coefficiente di Dice sui bigrammi)
+  q = norm(q); t = norm(t);
+  if (!q || !t) return 0;
+  if (t.startsWith(q)) return 1;
+  if (t.includes(q)) return 0.95;
+  const bg = s => { const m = new Map(); for (let i = 0; i < s.length - 1; i++) { const g = s.slice(i, i + 2); m.set(g, (m.get(g) || 0) + 1); } return m; };
+  const A = bg(q), B = bg(t.slice(0, q.length + 6));   // confronta con l'inizio del titolo
+  let inter = 0; for (const [g, c] of A) inter += Math.min(c, B.get(g) || 0);
+  const sum = m => [...m.values()].reduce((a, b) => a + b, 0);
+  return 2 * inter / ((sum(A) + sum(B)) || 1);
+}
+async function searchOnce(q, signal) {
+  const [m, t] = await Promise.all([
+    tmdb("/search/movie", { query: q, include_adult: "false", region: REGION }, { signal }),
+    tmdb("/search/tv", { query: q, include_adult: "false" }, { signal })
+  ]);
+  return [...m.results.map(r => ({ ...r, media_type: "movie" })), ...t.results.map(r => ({ ...r, media_type: "tv" }))];
+}
+function typoVariants(q) {
+  const words = norm(q).split(" "), out = new Set();
+  words.forEach((w, i) => {
+    if (w.length < 5) return;
+    const put = v => out.add([...words.slice(0, i), v, ...words.slice(i + 1)].join(" "));
+    for (let k = 0; k < w.length; k++) put(w.slice(0, k) + w.slice(k + 1));                       // lettera in più
+    for (let k = 0; k < w.length - 1; k++) put(w.slice(0, k) + w[k + 1] + w[k] + w.slice(k + 2));  // lettere invertite
+  });
+  out.delete(norm(q));
+  return [...out].slice(0, 16);
+}
+async function smartSearch(q, signal) {
+  let res = (await searchOnce(q, signal)).map(r => ({ ...r, _orig: true }));
+  if (res.length < 8) {
+    const vars = typoVariants(q);
+    const more = await Promise.all(vars.map(v =>
+      tmdb("/search/multi", { query: v, include_adult: "false" }, { signal }).then(j => j.results).catch(() => [])));
+    res = res.concat(more.flat().filter(r => r.media_type === "movie" || r.media_type === "tv"));
+  }
+  const seen = new Map();
+  for (const r of res) {
+    const k = r.media_type + ":" + r.id;
+    const score = Math.max(sim(q, r.title || r.name), sim(q, r.original_title || r.original_name));
+    if (!r._orig && score < 0.5) continue;              // scarta varianti poco somiglianti
+    const prev = seen.get(k);
+    if (!prev || score > prev._s) seen.set(k, { ...r, _s: score });
+  }
+  return [...seen.values()]
+    .sort((a, b) => (b._s - a._s) || ((b.popularity || 0) - (a.popularity || 0)))
+    .slice(0, 30);
+}
+
 async function viewSearch(q) {
   const signal = newCtrl();
   app.innerHTML = `<h2>Risultati per “${esc(q)}”</h2>${skeletonGrid(8)}`;
   try {
-    const j = await tmdb("/search/multi", { query: q, include_adult: "false", region: REGION }, { signal });
-    const items = j.results.filter(r => r.media_type === "movie" || r.media_type === "tv");
+    const items = await smartSearch(q, signal);
     app.innerHTML = `<h2>Risultati per “${esc(q)}”</h2>` + (items.length ? `<div class="grid">${items.map(it => cardHTML(it)).join("")}</div>` : `<div class="empty">Nessun risultato. Prova con il titolo originale.</div>`);
     decorateCards(app, signal);
   } catch (e) { if (e.name !== "AbortError") app.innerHTML = errorBox(e); }
@@ -314,7 +365,7 @@ async function viewDetail(type, id) {
   const signal = newCtrl();
   app.innerHTML = `<div class="hero sk"></div><div class="dwrap"><div class="poster sk"></div><div style="flex:1"><div class="sk" style="height:28px;width:60%;border-radius:6px"></div></div></div>`;
   try {
-    const d = await tmdb(`/${type}/${id}`, { append_to_response: "watch/providers" }, { signal });
+    const d = await tmdb(`/${type}/${id}`, { append_to_response: "watch/providers,recommendations" }, { signal });
     const title = d.title || d.name;
     const orig = d.original_title || d.original_name;
     const y = year(d.release_date || d.first_air_date);
@@ -338,7 +389,29 @@ async function viewDetail(type, id) {
         </div>
       </div>
       ${d.overview ? `<p class="overview">${esc(d.overview)}</p>` : ""}
-      ${providersHTML(reg)}`;
+      ${providersHTML(reg)}
+      <div id="saga"></div>
+      <div id="related"></div>`;
+
+    // Della stessa saga (solo film che fanno parte di una collezione)
+    if (type === "movie" && d.belongs_to_collection) {
+      tmdb(`/collection/${d.belongs_to_collection.id}`, {}, { signal, ttl: TTL.long }).then(c => {
+        const parts = (c.parts || []).filter(p => p.id !== d.id)
+          .sort((a, b) => (a.release_date || "9999").localeCompare(b.release_date || "9999"));
+        const box = $("#saga");
+        if (box && parts.length) {
+          box.innerHTML = `<div class="sec"><h3>Della stessa saga · ${esc(c.name)}</h3><div class="grid">${parts.map(p => cardHTML(p, "movie")).join("")}</div></div>`;
+          decorateCards(box, signal);
+        }
+      }).catch(() => {});
+    }
+    // Titoli correlati (spesso include la serie collegata a un film e viceversa)
+    const rec = (d.recommendations?.results || []).filter(r => r.media_type === "movie" || r.media_type === "tv").slice(0, 12);
+    if (rec.length) {
+      const box = $("#related");
+      box.innerHTML = `<div class="sec"><h3>Potrebbe interessarti</h3><div class="grid">${rec.map(r => cardHTML(r)).join("")}</div></div>`;
+      decorateCards(box, signal);
+    }
   } catch (e) { if (e.name !== "AbortError") app.innerHTML = errorBox(e); }
 }
 
