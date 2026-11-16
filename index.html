@@ -162,6 +162,9 @@ h2{font-size:18px;margin:6px 0 12px;letter-spacing:-.2px}
 .scroller::-webkit-scrollbar{display:none}
 .scroller .card{flex:0 0 132px;scroll-snap-align:start}
 @media(min-width:700px){.scroller .card{flex-basis:165px}}
+.toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom));transform:translate(-50%,30px);opacity:0;background:#1f2937;border:1px solid var(--line);color:#fff;padding:12px 18px;border-radius:12px;font-weight:600;z-index:50;transition:all .35s;box-shadow:0 8px 30px rgba(0,0,0,.5);max-width:90vw;text-align:center}
+.toast.in{transform:translate(-50%,0);opacity:1}
+.btn[disabled]{opacity:.5;cursor:default}
 footer{max-width:1100px;margin:0 auto;padding:0 16px 30px;color:var(--tx3);font-size:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 footer img{height:12px}
 .empty{padding:40px 0;text-align:center;color:var(--tx2)}
@@ -612,6 +615,15 @@ async function viewSettings() {
       </div>
       <div class="field" style="margin-top:12px"><input id="pf" type="search" placeholder="Filtra piattaforme…" style="font-family:inherit"></div>
       <div id="plist">${state.key ? `<div class="muted small" style="margin-top:12px">Carico le piattaforme…</div>` : `<div class="muted small" style="margin-top:12px">Inserisci prima la chiave TMDB.</div>`}</div>
+    </div>
+    <div class="panel">
+      <b>📱 Usa Popcorn su un altro dispositivo</b>
+      <p class="muted small" style="margin:4px 0 10px">Invia questo link a te stesso (WhatsApp, email…) e aprilo sul telefono: chiave e abbonamenti si configurano da soli. Il link contiene la tua chiave, quindi non condividerlo con estranei.</p>
+      <div class="field">
+        <button class="btn pri" id="share" ${state.key ? "" : "disabled"}>Condividi link</button>
+        <button class="btn" id="copy" ${state.key ? "" : "disabled"}>Copia link</button>
+      </div>
+      <div class="status" id="lst"></div>
     </div>`;
 
   const keyIn = $("#key");
@@ -632,6 +644,15 @@ async function viewSettings() {
     }
   };
   $("#none").onclick = () => { state.subs.clear(); saveSubs(); renderProviders(); };
+  const setupLink = () => location.href.split("#")[0] + "#/setup?k=" + encodeURIComponent(state.key) + "&s=" + [...state.subs].join(",");
+  $("#copy").onclick = async () => {
+    try { await navigator.clipboard.writeText(setupLink()); $("#lst").innerHTML = `<span style="color:var(--ok)">✓ Link copiato. Incollalo in un messaggio a te stesso e aprilo dal telefono.</span>`; }
+    catch { prompt("Copia questo link:", setupLink()); }
+  };
+  $("#share").onclick = async () => {
+    if (navigator.share) { try { await navigator.share({ title: "Popcorn", text: "Configura Popcorn su questo dispositivo", url: setupLink() }); } catch {} }
+    else $("#copy").click();
+  };
   $("#pf").oninput = () => renderProviders();
   if (state.key) renderProviders();
 }
@@ -658,11 +679,28 @@ async function renderProviders() {
 
 /* ================= router & search box ================= */
 const qIn = $("#q"), sbox = $("#sbox");
+function toast(msg) {
+  const t = document.createElement("div"); t.className = "toast"; t.textContent = msg;
+  document.body.appendChild(t); setTimeout(() => t.classList.add("in"), 10);
+  setTimeout(() => { t.classList.remove("in"); setTimeout(() => t.remove(), 400); }, 3500);
+}
 function route() {
   stopHero();
   const h = location.hash.slice(1) || "/";
   const parts = h.split("/").filter(Boolean);
   window.scrollTo(0, 0);
+  if (parts[0] && parts[0].startsWith("setup")) {          // link di configurazione da un altro dispositivo
+    const prm = new URLSearchParams(h.split("?")[1] || "");
+    const k = (prm.get("k") || "").trim();
+    if (k) {
+      state.key = k; LS.set("tmdbKey", k);
+      state.subs = new Set((prm.get("s") || "").split(",").map(Number).filter(Boolean)); saveSubs();
+      state.providers = null; cacheClear();
+    }
+    history.replaceState(null, "", location.pathname + "#/");   // toglie la chiave dalla barra degli indirizzi
+    toast(k ? "✓ Popcorn è configurato su questo dispositivo" : "Link di configurazione non valido");
+    return viewHome();
+  }
   if (parts[0] === "impostazioni") return viewSettings();
   if ((parts[0] === "movie" || parts[0] === "tv") && parts[1]) return viewDetail(parts[0], parts[1]);
   if (parts[0] === "cerca" && parts[1]) {
