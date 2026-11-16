@@ -32,7 +32,8 @@ header{position:sticky;top:0;z-index:10;background:rgba(15,17,21,.85);backdrop-f
 .bar{max-width:1100px;margin:0 auto;display:flex;gap:10px;align-items:center}
 .logo{font-weight:700;font-size:17px;white-space:nowrap;letter-spacing:-.2px}
 .logo{display:flex;align-items:center;gap:8px}
-.logo img{width:30px;height:30px;border-radius:8px}
+.logo img{width:40px;height:40px;border-radius:10px}
+.logo .lt{font-size:19px}
 .search{flex:1;position:relative}
 @media(max-width:480px){.logo .lt{display:none}}
 .search input{width:100%;background:var(--bg3);border:1px solid var(--line);border-radius:999px;padding:10px 38px 10px 40px;color:var(--tx);font-size:15px;outline:none;transition:border-color .15s}
@@ -93,6 +94,11 @@ h2{font-size:18px;margin:6px 0 12px;letter-spacing:-.2px}
 .provs{display:flex;flex-wrap:wrap;gap:10px}
 .prov{display:flex;align-items:center;gap:10px;background:var(--bg2);border:1px solid var(--line);border-radius:12px;padding:7px 12px 7px 7px}
 .prov img{width:38px;height:38px;border-radius:9px}
+a.prov{cursor:pointer;transition:border-color .12s,transform .12s,background .12s}
+a.prov:hover{border-color:var(--tx3);transform:translateY(-1px)}
+a.prov:active{transform:scale(.97)}
+.prov .go{color:var(--tx3);font-size:13px;margin-left:2px}
+.prov.mine .go{color:var(--ok)}
 .prov .n{font-size:14px;font-weight:500}
 .prov.mine{border-color:var(--ok);background:rgba(34,197,94,.08)}
 .prov.mine .n::after{content:" ✓";color:var(--ok)}
@@ -592,7 +598,7 @@ async function viewDetail(type, id) {
         </div>
       </div>
       ${d.overview ? `<p class="overview">${esc(d.overview)}</p>` : ""}
-      ${providersHTML(reg)}
+      ${providersHTML(reg, title)}
       <div id="saga"></div>
       <div id="related"></div>`;
 
@@ -618,14 +624,32 @@ async function viewDetail(type, id) {
   } catch (e) { if (e.name !== "AbortError") app.innerHTML = errorBox(e); }
 }
 
-function providersHTML(reg) {
+/* link per aprire il titolo sulla piattaforma (ricerca del titolo nel servizio) */
+const PROVIDER_LINKS = [
+  [/netflix/i, q => `https://www.netflix.com/search?q=${q}`],
+  [/prime video|amazon prime/i, q => `https://www.primevideo.com/search?phrase=${q}`],
+  [/amazon video/i, q => `https://www.amazon.it/s?k=${q}&i=instant-video`],
+  [/disney/i, q => `https://www.disneyplus.com/search?q=${q}`],
+  [/apple tv/i, q => `https://tv.apple.com/it/search?term=${q}`],
+  [/raiplay/i, q => `https://www.raiplay.it/ricerca.html?q=${q}`],
+  [/google play/i, q => `https://play.google.com/store/search?q=${q}&c=movies`],
+  [/youtube/i, q => `https://www.youtube.com/results?search_query=${q}`]
+];
+function providerLink(p, title, fallback) {
+  const rule = PROVIDER_LINKS.find(([re]) => re.test(p.provider_name));
+  return rule ? rule[1](encodeURIComponent(title)) : fallback;
+}
+function providersHTML(reg, title = "") {
   if (!reg) return `<div class="sec"><div class="no">Al momento non risulta disponibile su nessuna piattaforma in Italia.</div></div>`;
   const uniq = arr => [...new Map((arr || []).map(p => [p.provider_id, p])).values()].sort((a, b) => (a.display_priority ?? 99) - (b.display_priority ?? 99));
   const included = uniq([...(reg.flatrate || []), ...(reg.free || []), ...(reg.ads || [])]);
   const mine = included.filter(p => state.subs.has(p.provider_id));
   const others = included.filter(p => !state.subs.has(p.provider_id));
   const rent = uniq(reg.rent), buy = uniq(reg.buy);
-  const pill = p => `<div class="prov ${state.subs.has(p.provider_id) ? "mine" : ""}"><img src="${img(p.logo_path, "w92")}" alt=""><span class="n">${esc(p.provider_name)}</span></div>`;
+  const pill = p => {
+    const href = providerLink(p, title, reg.link);
+    return `<a class="prov ${state.subs.has(p.provider_id) ? "mine" : ""}" ${href ? `href="${esc(href)}" target="_blank" rel="noopener"` : ""} title="Apri su ${esc(p.provider_name)}"><img src="${img(p.logo_path, "w92")}" alt=""><span class="n">${esc(p.provider_name)}</span><span class="go">↗</span></a>`;
+  };
   const sec = (t, arr) => arr.length ? `<div class="sec"><h3>${t}</h3><div class="provs">${arr.map(pill).join("")}</div></div>` : "";
 
   let head = "";
@@ -748,7 +772,7 @@ function route() {
   if ((parts[0] === "movie" || parts[0] === "tv") && parts[1]) return viewDetail(parts[0], parts[1]);
   if (parts[0] === "cerca" && parts[1]) {
     const q = decodeURIComponent(parts[1]);
-    if (qIn.value !== q) qIn.value = q;
+    if (qIn.value.trim() !== q) qIn.value = q;
     sbox.classList.toggle("has", !!q);
     return viewSearch(q);
   }
