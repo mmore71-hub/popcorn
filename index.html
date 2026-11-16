@@ -171,6 +171,15 @@ a.prov:active{transform:scale(.97)}
 .toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom));transform:translate(-50%,30px);opacity:0;background:#1f2937;border:1px solid var(--line);color:#fff;padding:12px 18px;border-radius:12px;font-weight:600;z-index:50;transition:all .35s;box-shadow:0 8px 30px rgba(0,0,0,.5);max-width:90vw;text-align:center}
 .toast.in{transform:translate(-50%,0);opacity:1}
 .btn[disabled]{opacity:.5;cursor:default}
+.heart{position:absolute;top:6px;right:6px;width:32px;height:32px;border-radius:50%;background:rgba(0,0,0,.55);color:rgba(255,255,255,.85);font-size:17px;line-height:1;display:grid;place-items:center;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);transition:transform .15s,background .15s,color .15s;z-index:2}
+.heart:hover{transform:scale(1.1)}
+.heart.on{background:#ff3b5c;color:#fff}
+.likebtn{margin-top:12px;display:inline-flex;align-items:center;gap:7px;padding:8px 16px;border-radius:999px;background:var(--bg3);border:1px solid var(--line);font-weight:600;font-size:14px;transition:all .15s}
+.likebtn .h{color:var(--tx3);font-size:16px}
+.likebtn.on{background:rgba(255,59,92,.15);border-color:#ff3b5c}
+.likebtn.on .h{color:#ff3b5c}
+.panel.tip{border-color:rgba(255,59,92,.35);background:linear-gradient(135deg,rgba(255,59,92,.08),var(--bg2))}
+#row-foryou h2::before{content:"✨ "}
 footer{max-width:1100px;margin:0 auto;padding:0 16px 30px;color:var(--tx3);font-size:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 footer img{height:12px}
 .empty{padding:40px 0;text-align:center;color:var(--tx2)}
@@ -214,6 +223,8 @@ const state = {
   key: LS.get("tmdbKey", ""),
   subs: new Set(LS.get("subs", [])),
   homeProv: LS.get("homeProv", null),
+  likes: LS.get("likes", []),        // [{k:"movie:123", title, at}]
+  history: LS.get("history", []),    // titoli aperti di recente
   providers: null
 };
 const saveSubs = () => LS.set("subs", [...state.subs]);
@@ -272,6 +283,53 @@ function errorBox(e) {
   return `<div class="panel"><b>Qualcosa è andato storto</b><p class="muted small" style="margin-top:6px">${esc(e.message)}</p></div>`;
 }
 
+/* ================= gusti: ❤️ e cronologia ================= */
+const isLiked = k => state.likes.some(l => l.k === k);
+function toggleLike(k, title) {
+  if (isLiked(k)) { state.likes = state.likes.filter(l => l.k !== k); toast("Rimosso dai preferiti"); }
+  else { state.likes.unshift({ k, title, at: Date.now() }); state.likes = state.likes.slice(0, 60); toast("❤️ Aggiunto: lo userò per i tuoi consigli"); }
+  LS.set("likes", state.likes);
+  document.querySelectorAll(`[data-like="${k}"]`).forEach(b => b.classList.toggle("on", isLiked(k)));
+}
+function addHistory(k, title) {
+  state.history = [{ k, title, at: Date.now() }, ...state.history.filter(h => h.k !== k)].slice(0, 30);
+  LS.set("history", state.history);
+}
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-like]"); if (!b) return;
+  e.preventDefault(); e.stopPropagation();
+  toggleLike(b.dataset.like, b.dataset.title || "");
+}, true);
+
+/* Consigli: unisce le "recommendations" di TMDB dei titoli che ti piacciono (peso 3) e di quelli aperti di recente (peso 1) */
+async function recommendFor(seeds, signal, limit = 20) {
+  const exclude = new Set([...state.likes.map(l => l.k), ...seeds.map(s => s.k)]);
+  const score = new Map();
+  const lists = await Promise.all(seeds.map(s => {
+    const [t, id] = s.k.split(":");
+    return tmdb(`/${t}/${id}/recommendations`, {}, { signal, ttl: 24 * 3600e3 }).then(j => ({ s, res: j.results || [] })).catch(() => ({ s, res: [] }));
+  }));
+  for (const { s, res } of lists) res.forEach((r, i) => {
+    if (r.media_type !== "movie" && r.media_type !== "tv") return;
+    const k = r.media_type + ":" + r.id; if (exclude.has(k) || !r.poster_path) return;
+    const e = score.get(k) || { r, v: 0 };
+    e.v += s.w * (1 - i / 40) + (r.vote_average || 0) / 50;
+    score.set(k, e);
+  });
+  let cand = [...score.values()].sort((a, b) => b.v - a.v).slice(0, 40);
+  if (state.subs.size) {                     // prima quello che puoi vedere con i tuoi abbonamenti
+    await Promise.all(cand.map(async c => { try { c.mine = (await myProviders(c.r.media_type, c.r.id)).length > 0; } catch { c.mine = false; } }));
+    cand.sort((a, b) => (b.mine - a.mine) || (b.v - a.v));
+  }
+  return cand.slice(0, limit).map(c => c.r);
+}
+function tasteSeeds() {
+  const seen = new Set(), out = [];
+  for (const l of state.likes.slice(0, 8)) if (!seen.has(l.k)) { seen.add(l.k); out.push({ ...l, w: 3 }); }
+  for (const h of state.history.slice(0, 6)) if (!seen.has(h.k)) { seen.add(h.k); out.push({ ...h, w: 1 }); }
+  return out;
+}
+
 function cardHTML(it, type) {
   const t = type || it.media_type;
   const title = it.title || it.name;
@@ -279,7 +337,9 @@ function cardHTML(it, type) {
   const p = img(it.poster_path, "w342");
   return `<a class="card" href="#/${t}/${it.id}" data-k="${t}:${it.id}">
     <div class="poster">${p ? `<img loading="lazy" src="${p}" alt="">` : `<div class="noimg">${esc(title)}</div>`}
-      <span class="badge">${t === "tv" ? "Serie" : "Film"}</span><div class="minis"></div></div>
+      <span class="badge">${t === "tv" ? "Serie" : "Film"}</span>
+      <button class="heart ${isLiked(t + ":" + it.id) ? "on" : ""}" data-like="${t}:${it.id}" data-title="${esc(title)}" aria-label="Mi piace">♥</button>
+      <div class="minis"></div></div>
     <div class="meta"><div class="t">${esc(title)}</div><div class="y">${y || "—"}</div></div></a>`;
 }
 const skeletonGrid = n => `<div class="grid">${Array.from({ length: n }, () => `<div class="card"><div class="poster sk"></div><div class="meta"><div class="sk" style="height:12px;border-radius:4px;width:80%"></div></div></div>`).join("")}</div>`;
@@ -354,7 +414,11 @@ async function viewHome() {
   if (subs.length) base.with_watch_providers = sel ? String(sel) : subs.join("|");
   const disc = (type, extra) => tmdb(`/discover/${type}`, { ...base, ...extra }, { signal }).then(j => j.results.map(r => ({ ...r, media_type: type })));
 
+  const seeds = tasteSeeds();
+  const lastLike = state.likes[0];
   const rows = [
+    ...(seeds.length ? [{ id: "foryou", t: "Consigliati per te", f: () => recommendFor(seeds, signal) }] : []),
+    ...(lastLike && state.likes.length > 1 ? [{ id: "because", t: `Perché ti è piaciuto «${lastLike.title}»`, f: () => recommendFor([{ ...lastLike, w: 3 }], signal, 15) }] : []),
     { id: "pm", t: `Film popolari ${where}`, f: () => disc("movie", { sort_by: "popularity.desc" }) },
     { id: "pt", t: `Serie popolari ${where}`, f: () => disc("tv", { sort_by: "popularity.desc" }) },
     { id: "trend", t: "Di tendenza oggi", sub: "Tutte le piattaforme", f: () => tmdb("/trending/all/day", {}, { signal }).then(j => j.results.filter(r => r.media_type === "movie" || r.media_type === "tv")) },
@@ -367,6 +431,7 @@ async function viewHome() {
   app.innerHTML = `
     <div class="featwrap" id="feat"><div class="feat sk"></div></div>
     <div class="greet"><h1>${greeting()}, cosa guardiamo ${new Date().getHours() >= 17 || new Date().getHours() < 4 ? "stasera" : "oggi"}? 🍿</h1></div>
+    ${seeds.length ? "" : `<div class="panel tip"><b>❤️ Fammi conoscere i tuoi gusti</b><p class="muted small" style="margin-top:4px">Tocca il cuore sulle locandine dei film e delle serie che ti sono piaciuti: qui comparirà una riga di consigli su misura per te.</p></div>`}
     ${subs.length ? "" : `<div class="panel"><b>Scegli i tuoi abbonamenti</b><p class="muted small" style="margin-top:4px">Così la home ti mostra solo quello che puoi vedere senza pagare altro.</p><a class="cta" href="#/impostazioni">Scegli abbonamenti</a></div>`}
     ${provs.length > 1 ? `<div class="pchips">
         <button class="pchip all ${sel ? "" : "on"}" data-p="">Tutti i miei</button>
@@ -403,7 +468,7 @@ async function viewHome() {
       results[r.id] = [];
       if (r.id === "pm" && sec) sec.innerHTML = errorBox(e); else sec?.remove();
     }
-  }).map((p, i) => i < 3 ? p.then(() => { if (i === 0 || i === 1) buildHero(); }) : p));
+  }).map(p => p.then(buildHero)));
 
   function buildHero() {
     if (heroTimer || signal.aborted || !results.pm || !results.pt) return;
@@ -586,6 +651,8 @@ async function viewDetail(type, id) {
     ].filter(Boolean).join(" · ");
 
     const reg = d["watch/providers"]?.results?.[REGION];
+    const lk = type + ":" + d.id;
+    addHistory(lk, title);
     app.innerHTML = `
       <div class="hero" style="${d.backdrop_path ? `background-image:url(${img(d.backdrop_path, "w1280")})` : ""}"></div>
       <div class="dwrap">
@@ -595,6 +662,7 @@ async function viewDetail(type, id) {
           <div class="dtitle">${esc(title)}</div>
           ${orig && orig !== title ? `<div class="dsub">${esc(orig)}</div>` : ""}
           <div class="dsub">${esc(info)}</div>
+          <button class="likebtn ${isLiked(lk) ? "on" : ""}" data-like="${lk}" data-title="${esc(title)}"><span class="h">♥</span> Mi piace</button>
         </div>
       </div>
       ${d.overview ? `<p class="overview">${esc(d.overview)}</p>` : ""}
@@ -689,6 +757,11 @@ async function viewSettings() {
       <div id="plist">${state.key ? `<div class="muted small" style="margin-top:12px">Carico le piattaforme…</div>` : `<div class="muted small" style="margin-top:12px">Inserisci prima la chiave TMDB.</div>`}</div>
     </div>
     <div class="panel">
+      <div class="row"><div><b>❤️ I tuoi gusti</b> <span class="muted small">· ${state.likes.length} preferiti, ${state.history.length} titoli visti di recente</span></div>
+        <button class="btn small" id="resetTaste">Azzera</button></div>
+      ${state.likes.length ? `<p class="muted small" style="margin-top:8px">${state.likes.slice(0, 12).map(l => esc(l.title)).join(" · ")}${state.likes.length > 12 ? " …" : ""}</p>` : ""}
+    </div>
+    <div class="panel">
       <b>📱 Usa Popcorn su un altro dispositivo</b>
       <p class="muted small" style="margin:4px 0 10px">Invia questo link a te stesso (WhatsApp, email…) e aprilo sul telefono: chiave e abbonamenti si configurano da soli. Il link contiene la tua chiave, quindi non condividerlo con estranei.</p>
       <div class="field">
@@ -716,6 +789,10 @@ async function viewSettings() {
     }
   };
   $("#none").onclick = () => { state.subs.clear(); saveSubs(); renderProviders(); };
+  $("#resetTaste").onclick = () => {
+    if (!confirm("Vuoi cancellare preferiti e cronologia? I consigli ripartiranno da zero.")) return;
+    state.likes = []; state.history = []; LS.set("likes", []); LS.set("history", []); viewSettings();
+  };
   const setupLink = () => location.href.split("#")[0] + "#/setup?k=" + encodeURIComponent(state.key) + "&s=" + [...state.subs].join(",");
   $("#copy").onclick = async () => {
     try { await navigator.clipboard.writeText(setupLink()); $("#lst").innerHTML = `<span style="color:var(--ok)">✓ Link copiato. Incollalo in un messaggio a te stesso e aprilo dal telefono.</span>`; }
